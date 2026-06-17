@@ -12,5 +12,6 @@ dependencies = [
     "requests>=2.32.3",
 ]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.setuptools]
+packages = ["wt_aloft"]
+package-dir = {"wt_aloft" = "src"}
