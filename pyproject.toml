@@ -1,0 +1,17 @@
+[project]
+name = "wt_aloft"
+version = "1.0.0"
+description = "An updatable online display with winds and temps aloft, so the dropzones can set up the screen and not worry about writing down"
+requires-python = ">=3.8"
+license = "GPL-3.0-or-later"
+authors = [
+    {name = "Vitaly Greck", email = "vintozver@ya.ru"}
+]
+
+dependencies = [
+    "requests>=2.32.3",
+    "tkinter>=3.13.5",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
