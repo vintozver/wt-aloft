@@ -10,7 +10,6 @@ authors = [
 
 dependencies = [
     "requests>=2.32.3",
-    "tkinter>=3.13.5",
 ]
 
 [tool.setuptools.packages.find]
