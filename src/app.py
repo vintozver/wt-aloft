@@ -1,12 +1,13 @@
 import tkinter as tk
 import tkinter.font as tk_font
-from threading import Thread, Event
 import requests
 import time
 import logging
-import signal
 import datetime
+import dateutil
 import json
+import pytz
+import urllib.parse
 
 
 log = logging.getLogger(__name__)
@@ -21,22 +22,32 @@ class Application(tk.Frame):
     header_color = 'red'
     label_color = 'green'
 
-    FONT_TITLE=100
-    FONT_STUFF=75
+    def __init__(self, latitude: float, longitude: float, font_title: int, font_stuff: int, altitudes: list[int], master=None):
+        self.FONT_TITLE = font_title
+        self.FONT_STUFF = font_stuff
+        self.ALTITUDES = altitudes
+        self.tz = pytz.timezone('America/Los_Angeles')
 
-    uri = 'https://www.markschulze.net/winds/winds_openmeteo.php?lat=46.4772&lon=-122.8064&hourOffset=0'
+        self.wt_uri = urllib.parse.urlunsplit((
+            'https', 'www.markschulze.net', '/winds/winds_openmeteo.php',
+            urllib.parse.urlencode((('lat', '%.4f' % latitude), ('lon', '%.4f' % longitude), ('hourOffset', '0'))),
+            ''
+            ))
+        self.sun_uri = urllib.parse.urlunsplit((
+            'https', 'api.sunrise-sunset.org', '/json',
+            urllib.parse.urlencode((('lat', '%.4f' % latitude), ('lng', '%.4f' % longitude), ('formatted', '0'), ('tzid', self.tz.zone))),
+            ''
+        ))
+        log.info('WT uri: ' + self.wt_uri)
+        log.info('Sun uri: ' + self.sun_uri)
 
-    def __init__(self, master=None):
+
         super().__init__(master, background=self.background_color)
 
-        self.shutdown_event = Event()
-        
-        self.create_vars(18)
-        self.create_vars(12)
-        self.create_vars(9)
-        self.create_vars(6)
-        self.create_vars(3)
-        self.create_vars(0)
+        self.shutdown_event = False
+
+        for alt in self.ALTITUDES:
+            self.create_vars(alt)
 
         self.state = 0
 
@@ -45,6 +56,8 @@ class Application(tk.Frame):
 
         self.create_widgets()
 
+        self.master.after(0, self.update_wt)
+        self.master.after(0, self.update_sun)
         self.master.after(0, self.invoke_switch_windows)
 
     def create_vars(self, alt: int):
@@ -62,18 +75,18 @@ class Application(tk.Frame):
         # alt is thousands of feet without 'k' suffix
 
         if alt > 0:
-            alt_str = '%dk' % alt
+            alt_str = '%d ft' % (alt * 1000)
         else:
-            alt_str = 'SFC'
+            alt_str = 'ground'
 
         frame = tk.Frame(self.frame_main, background=self.background_color)
         frame.pack(side='top', fill=tk.X)
-        frame_label = tk.Label(frame, width=5, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        frame_label = tk.Label(frame, width=8, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.label_color, font=tk_font.Font(size=self.FONT_STUFF),
             text=alt_str
         )
         frame_label.pack(side='left')
-        label_wind_dir = tk.Label(frame, width=6, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        label_wind_dir = tk.Label(frame, width=9, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.text_color, font=tk_font.Font(size=self.FONT_STUFF),
             textvariable=getattr(self, 'v_%dk_wind_dir' % alt),
         )
@@ -83,11 +96,17 @@ class Application(tk.Frame):
             textvariable=getattr(self, 'v_%dk_wind_spd' % alt),
         )
         label_wind_spd.pack(side='left')
-        label_temp = tk.Label(frame, width=6, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        label_temp = tk.Label(frame, width=10, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.text_color, font=tk_font.Font(size=self.FONT_STUFF),
             textvariable=getattr(self, 'v_%dk_temp' % alt),
         )
         label_temp.pack(side='left')
+
+    def update_line(self, alt: int, directions: dict, speeds: dict, temps: dict):
+        k = '%d' % (alt * 1000)
+        getattr(self, 'v_%dk_wind_dir' % alt).set('%d°' % directions[k])
+        getattr(self, 'v_%dk_wind_spd' % alt).set('%dkts' % speeds[k])
+        getattr(self, 'v_%dk_temp' % alt).set('%d °C' % temps[k])
 
     def create_widgets(self):
         self.frame_main = tk.Frame(self, background=self.background_color)
@@ -105,14 +124,14 @@ class Application(tk.Frame):
 
         frame_titles = tk.Frame(self.frame_main, background=self.background_color)
         frame_titles.pack(side='top', fill=tk.X)
-        frame_titles_empty = tk.Label(frame_titles, width=5, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        frame_titles_empty = tk.Label(frame_titles, width=8, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.label_color, font=tk_font.Font(size=self.FONT_STUFF),
-            text='alt'
+            text='altitude'
         )
         frame_titles_empty.pack(side='left')
-        frame_titles_wind_dir = tk.Label(frame_titles, width=6, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        frame_titles_wind_dir = tk.Label(frame_titles, width=9, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.label_color, font=tk_font.Font(size=self.FONT_STUFF),
-            text='W from'
+            text='wind from'
         )
         frame_titles_wind_dir.pack(side='left')
         frame_titles_wind_speed = tk.Label(frame_titles, width=6, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
@@ -120,39 +139,58 @@ class Application(tk.Frame):
             text='speed'
         )
         frame_titles_wind_speed.pack(side='left')
-        frame_titles_temp = tk.Label(frame_titles, width=6, padx=4, pady=5, anchor=tk.E, justify=tk.LEFT,
+        frame_titles_temp = tk.Label(frame_titles, width=10, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.label_color, font=tk_font.Font(size=self.FONT_STUFF),
             text='temp'
         )
         frame_titles_temp.pack(side='left')
 
-        self.create_line(18)
-        self.create_line(12)
-        self.create_line(9)
-        self.create_line(6)
-        self.create_line(3)
-        self.create_line(0)
+        for alt in self.ALTITUDES:
+            self.create_line(alt)
 
         self.v_upd = tk.StringVar()
         self.v_upd.set('- ? -')
         frame_upd = tk.Frame(self.frame_main, background=self.background_color)
         frame_upd.pack(side='top', fill=tk.X)
-        frame_upd_label = tk.Label(frame_upd, width=5, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        frame_upd_label = tk.Label(frame_upd, width=1, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.label_color, font=tk_font.Font(size=self.FONT_STUFF),
-            text='upd'
+            text='⇄'
         )
         frame_upd_label.pack(side='left')
-        label_upd = tk.Label(frame_upd, width=18, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
-            background=self.background_color, foreground=self.text_color, font=tk_font.Font(size=self.FONT_STUFF),
+        label_upd = tk.Label(frame_upd, width=15, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+            background=self.background_color, foreground='yellow', font=tk_font.Font(size=int(self.FONT_STUFF)),
             textvariable=self.v_upd,
         )
         label_upd.pack(side='left')
 
-        self.thread_fetcher = Thread(target=self.runner_fetcher, args=(), name='fetcher')
-        self.thread_fetcher.start()
+        self.v_sun_up = tk.StringVar()
+        self.v_sun_up.set("UU:UU")
+        self.v_sun_down = tk.StringVar()
+        self.v_sun_down.set("DD:DD")
+        frame_sun_up_label = tk.Label(frame_upd, width=3, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+            background=self.background_color, foreground=self.label_color, font=tk_font.Font(size=self.FONT_STUFF),
+            text='☼↑'
+        )
+        frame_sun_up_label.pack(side='left')
+        frame_sun_up_value = tk.Label(frame_upd, width=5, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+            background=self.background_color, foreground=self.text_color, font=tk_font.Font(size=self.FONT_STUFF),
+            textvariable=self.v_sun_up
+        )
+        frame_sun_up_value.pack(side='left')
+        frame_sun_down_label = tk.Label(frame_upd, width=3, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+            background=self.background_color, foreground=self.label_color, font=tk_font.Font(size=self.FONT_STUFF),
+            text='☼↓'
+        )
+        frame_sun_down_label.pack(side='left')
+        frame_sun_down_value = tk.Label(frame_upd, width=5, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+            background=self.background_color, foreground=self.text_color, font=tk_font.Font(size=self.FONT_STUFF),
+            textvariable=self.v_sun_down
+        )
+        frame_sun_down_value.pack(side='left')
+
 
     def invoke_switch_windows(self):
-        if self.shutdown_event.is_set():
+        if self.shutdown_event:
             log.warning("switch_windows invoked but shutdown is requested. noop, return")
             return
 
@@ -166,72 +204,104 @@ class Application(tk.Frame):
 
     def invoke_quit(self):
         log.info("quit enter")
-        self.shutdown_event.set()
+        self.shutdown_event = True
         self.master.destroy()
         log.info("quit exit")
 
-    def runner_fetcher(self):
-        log.critical('runner_fetcher enter')
+    def update_wt(self):
+        log.critical('update_wt enter')
 
-        while True:
-            result = self.runner_fetcher_iter()
-            if result is not None:
-                log.info('updating widgets')
-                directions = result["direction"]
-                speeds = result["speed"]
-                temps = result["temp"]
-                self.v_18k_wind_dir.set('%d°' % directions["18000"])
-                self.v_18k_wind_spd.set('%dkts' % speeds["18000"])
-                self.v_18k_temp.set('%d °C' % temps["18000"])
-                self.v_12k_wind_dir.set('%d°' % directions["12000"])
-                self.v_12k_wind_spd.set('%dkts' % speeds["12000"])
-                self.v_12k_temp.set('%d °C' % temps["12000"])
-                self.v_9k_wind_dir.set('%d°' % directions["9000"])
-                self.v_9k_wind_spd.set('%dkts' % speeds["9000"])
-                self.v_9k_temp.set('%d °C' % temps["9000"])
-                self.v_6k_wind_dir.set('%d°' % directions["6000"])
-                self.v_6k_wind_spd.set('%dkts' % speeds["6000"])
-                self.v_6k_temp.set('%d °C' % temps["6000"])
-                self.v_3k_wind_dir.set('%d°' % directions["3000"])
-                self.v_3k_wind_spd.set('%dkts' % speeds["3000"])
-                self.v_3k_temp.set('%d °C' % temps["3000"])
-                self.v_0k_wind_dir.set('%d°' % directions["0"])
-                self.v_0k_wind_spd.set('%dkts' % speeds["0"])
-                self.v_0k_temp.set('%d °C' % temps["0"])
-                self.v_upd.set(datetime.datetime.now(datetime.UTC).strftime('%Y%m%d T %H%M Z'))
-            else:
-                log.info('not updating widgets (result is None)')
-
-            if signal.sigtimedwait({signal.SIGINT, signal.SIGTERM}, 60) is not None:
-                self.shutdown_event.set()
-                break
-
-        log.critical('runner_fetcher exit')
-
-    def runner_fetcher_iter(self):
         log.info('Fetching data ...')
         try:
-            http_content = requests.get(self.uri, timeout=10).content
+            http_content = requests.get(self.wt_uri, timeout=10).content
             log.info('Fetching data success')
         except requests.exceptions.RequestException as err:
             http_content = None
-            log.info('Fetching data failure', err)
+            log.info('Fetching data failure', repr(err))
         if http_content is None:
             return None
 
-        return json.loads(http_content)
+        try:
+            result = json.loads(http_content)
+        except json.decoder.JSONDecodeError:
+            log.warning('WT data not decoded | %s' % http_content)
+            result = None
+        if result is not None:
+            log.info('updating widgets')
+            directions = result["direction"]
+            speeds = result["speed"]
+            temps = result["temp"]
+            for alt in self.ALTITUDES:
+                self.update_line(alt, directions, speeds, temps)
+            self.v_upd.set(datetime.datetime.now(self.tz).strftime('%Y-%m-%d %H:%M'))
+        else:
+            log.info('not updating widgets (result is None)')
+
+        self.master.after(60000, self.update_wt)
+
+        log.critical('update_wt exit')
+
+    def update_sun(self):
+        log.critical('update_sun enter')
+
+        log.info('Fetching data ...')
+        try:
+            http_content = requests.get(self.sun_uri, timeout=10).content
+            log.info('Fetching data success')
+        except requests.exceptions.RequestException as err:
+            http_content = None
+            log.info('Fetching data failure', repr(err))
+        if http_content is None:
+            return None
+
+        try:
+            result = json.loads(http_content)
+        except json.decoder.JSONDecodeError:
+            log.warning('WT data not decoded | %s' % http_content)
+            result = None
+        if result is not None:
+            if result.get('status') == 'OK':
+                sunrise = datetime.datetime.fromisoformat(result['results']['sunrise'])
+                sunset = datetime.datetime.fromisoformat(result['results']['sunset'])
+                log.info('updating widgets')
+                self.v_sun_up.set(sunrise.strftime('%H:%M'))
+                self.v_sun_down.set(sunset.strftime('%H:%M'))
+            else:
+                log.warning('not updating widgets (status is not OK)')
+        else:
+            log.info('not updating widgets (result is None)')
+
+        # updating once per day in the beginning of the day in the current timezone
+        dt = datetime.datetime.now(self.tz)
+        next_upd = int((dt + dateutil.relativedelta.relativedelta(days=1, hour=0, minute=0, second=0) - dt).total_seconds())
+        log.info('update_sun scheduling next update in %d seconds' % next_upd)
+        self.master.after(next_upd * 1000, self.update_sun)
+
+        log.critical('update_sun exit')
 
     def mainloop(self):
         super(Application, self).mainloop()
-        self.thread_fetcher.join()
 
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
 
+    import argparse
+    parser = argparse.ArgumentParser(prog='wt_aloft')
+    parser.add_argument('--font-title', type=int, default=85, help='Title font size')
+    parser.add_argument('--font-stuff', type=int, default=65, help='Stuff font size')
+    parser.add_argument('--latitude', type=float, default=46.4772, help='GPS latitude in degrees (decimal with dot)')
+    parser.add_argument('--longitude', type=float, default=-122.8064, help='GPS longitude in degrees (decimal with dot)')
+    parser.add_argument('--altitudes',
+        type=lambda val: [int(item.strip()) for item in val.split(",")],
+        default='15,12,9,6,3,0',
+        help='Comma separated list of altitudes in thousands of feet each'
+    )
+    args = parser.parse_args()
+
     root = tk.Tk()
-    root.after(1000, lambda: root.attributes('-fullscreen', True))
-    app = Application(master=root)
+    root.after(0, lambda: root.attributes('-fullscreen', True))
+    app = Application(args.latitude, args.longitude, args.font_title, args.font_stuff, args.altitudes, master=root)
     log.setLevel(logging.DEBUG)
     log.critical("Entering application mainloop")
     app.mainloop()

@@ -10,6 +10,8 @@ authors = [
 
 dependencies = [
     "requests>=2.32.3",
+    "pytz",
+    "dateutil>=2.9.0",
 ]
 
 [tool.setuptools]
