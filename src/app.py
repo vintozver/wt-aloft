@@ -213,75 +213,71 @@ class Application(tk.Frame):
         log.info("quit exit")
 
     def update_wt(self):
-        log.critical('update_wt enter')
-
-        log.info('Fetching data ...')
+        result = None
         try:
-            http_content = requests.get(self.wt_uri, timeout=10).content
-            log.info('Fetching data success')
-        except requests.exceptions.RequestException as err:
-            http_content = None
-            log.info('Fetching data failure', repr(err))
-        if http_content is None:
-            return None
+            log.info('update_wt fetching data ...')
+            try:
+                http_content = requests.get(self.wt_uri, timeout=10).content
+                log.info('Fetching data success')
+            except requests.exceptions.RequestException as err:
+                log.info('Fetching data failure', repr(err))
+                return
 
-        try:
-            result = json.loads(http_content)
-        except json.decoder.JSONDecodeError:
-            log.warning('WT data not decoded | %s' % http_content)
-            result = None
-        if result is not None:
-            log.info('updating widgets')
-            directions = result["direction"]
-            speeds = result["speed"]
-            temps = result["temp"]
-            for alt in self.ALTITUDES:
-                self.update_line(alt, directions, speeds, temps)
-            self.v_upd.set(datetime.datetime.now(self.tz).strftime('%Y-%m-%d %H:%M'))
-        else:
-            log.info('not updating widgets (result is None)')
+            try:
+                result = json.loads(http_content)
+            except json.decoder.JSONDecodeError:
+                log.warning('WT data not decoded | %s' % http_content)
+                return
+        finally:
+            if result is not None:
+                log.info('updating widgets')
+                for alt in self.ALTITUDES:
+                    self.update_line(alt, result["direction"], result["speed"], result["temp"])
+                self.v_upd.set(datetime.datetime.now(self.tz).strftime('%Y-%m-%d %H:%M'))
+            else:
+                log.info('not updating widgets (result is None)')
 
-        self.master.after(60000, self.update_wt)
-
-        log.critical('update_wt exit')
+            # next update - regardless of the error
+            self.master.after(60000, self.update_wt)
 
     def update_sun(self):
-        log.critical('update_sun enter')
-
-        log.info('Fetching data ...')
+        result = None
         try:
-            http_content = requests.get(self.sun_uri, timeout=10).content
-            log.info('Fetching data success')
-        except requests.exceptions.RequestException as err:
-            http_content = None
-            log.info('Fetching data failure', repr(err))
-        if http_content is None:
-            return None
+            log.info('Fetching data ...')
+            try:
+                http_content = requests.get(self.sun_uri, timeout=10).content
+                log.info('Fetching data success')
+            except requests.exceptions.RequestException as err:
+                log.info('Fetching data failure', repr(err))
+                return
 
-        try:
-            result = json.loads(http_content)
-        except json.decoder.JSONDecodeError:
-            log.warning('WT data not decoded | %s' % http_content)
-            result = None
-        if result is not None:
-            if result.get('status') == 'OK':
-                sunrise = datetime.datetime.fromisoformat(result['results']['sunrise'])
-                sunset = datetime.datetime.fromisoformat(result['results']['sunset'])
-                log.info('updating widgets')
-                self.v_sun_up.set(sunrise.strftime('%H:%M'))
-                self.v_sun_down.set(sunset.strftime('%H:%M'))
+            try:
+                result = json.loads(http_content)
+            except json.decoder.JSONDecodeError:
+                log.warning('WT data not decoded | %s' % http_content)
+                return
+        finally:
+            if result is not None:
+                if result.get('status') == 'OK':
+                    sunrise = datetime.datetime.fromisoformat(result['results']['sunrise'])
+                    sunset = datetime.datetime.fromisoformat(result['results']['sunset'])
+                    log.info('updating widgets')
+                    self.v_sun_up.set(sunrise.strftime('%H:%M'))
+                    self.v_sun_down.set(sunset.strftime('%H:%M'))
+
+                    # updating once per day in the beginning of the day in the current timezone
+                    dt = datetime.datetime.now(self.tz)
+                    next_upd = int((dt + dateutil.relativedelta.relativedelta(days=1, hour=0, minute=0, second=0) - dt).total_seconds())
+                    log.info('update_sun scheduling next update in %d seconds' % next_upd)
+                    self.master.after(next_upd * 1000, self.update_sun)
+                    return
+                else:
+                    log.warning('not updating widgets (status is not OK)')
             else:
-                log.warning('not updating widgets (status is not OK)')
-        else:
-            log.info('not updating widgets (result is None)')
+                log.info('not updating widgets (result is None)')
 
-        # updating once per day in the beginning of the day in the current timezone
-        dt = datetime.datetime.now(self.tz)
-        next_upd = int((dt + dateutil.relativedelta.relativedelta(days=1, hour=0, minute=0, second=0) - dt).total_seconds())
-        log.info('update_sun scheduling next update in %d seconds' % next_upd)
-        self.master.after(next_upd * 1000, self.update_sun)
-
-        log.critical('update_sun exit')
+            # failure to update - retry
+            self.master.after(60000, self.update_sun)
 
     def mainloop(self):
         super(Application, self).mainloop()
