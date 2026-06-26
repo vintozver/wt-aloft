@@ -52,7 +52,7 @@ class Application(tk.Frame):
         self.state = 0
 
         self.master = master
-        self.pack(side='top', fill=tk.BOTH, expand=True)
+        self.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
         self.create_widgets()
 
@@ -84,27 +84,30 @@ class Application(tk.Frame):
             alt_str = 'ground'
 
         frame = tk.Frame(self.frame_main, background=self.background_color)
-        frame.pack(side='top', fill=tk.X)
-        frame_label = tk.Label(frame, width=8, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        frame_in = tk.Frame(frame)
+        frame_in.place(anchor=tk.CENTER, relx=.5, rely=.5)
+
+        frame_label = tk.Label(frame_in, width=8, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.label_color, font=tk_font.Font(size=self.FONT_STUFF),
             text=alt_str
         )
-        frame_label.pack(side='left')
-        label_wind_dir = tk.Label(frame, width=9, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        frame_label.pack(side=tk.LEFT)
+        label_wind_dir = tk.Label(frame_in, width=9, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.text_color, font=tk_font.Font(size=self.FONT_STUFF),
             textvariable=getattr(self, 'v_%dk_wind_dir' % alt),
         )
-        label_wind_dir.pack(side='left')
-        label_wind_spd = tk.Label(frame, width=6, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        label_wind_dir.pack(side=tk.LEFT)
+        label_wind_spd = tk.Label(frame_in, width=6, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.text_color, font=tk_font.Font(size=self.FONT_STUFF),
             textvariable=getattr(self, 'v_%dk_wind_spd' % alt),
         )
-        label_wind_spd.pack(side='left')
-        label_temp = tk.Label(frame, width=10, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        label_wind_spd.pack(side=tk.LEFT)
+        label_temp = tk.Label(frame_in, width=5, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.text_color, font=tk_font.Font(size=self.FONT_STUFF),
             textvariable=getattr(self, 'v_%dk_temp' % alt),
         )
-        label_temp.pack(side='left')
+        label_temp.pack(side=tk.LEFT)
 
     def update_line(self, alt: int, directions: dict, speeds: dict, temps: dict):
         k = '%d' % (alt * 1000)
@@ -124,73 +127,79 @@ class Application(tk.Frame):
             font=tk_font.Font(size=self.FONT_TITLE),
             text='Winds and Temps aloft'
         )
-        top_label.pack(side='top', fill=tk.X)
+        top_label.pack(side=tk.TOP, fill=tk.X)
 
         frame_titles = tk.Frame(self.frame_main, background=self.background_color)
-        frame_titles.pack(side='top', fill=tk.X)
-        frame_titles_empty = tk.Label(frame_titles, width=8, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        frame_titles.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        frame_titles_in = tk.Frame(frame_titles)
+        frame_titles_in.place(anchor=tk.CENTER, relx=.5, rely=.5)
+        frame_titles_empty = tk.Label(frame_titles_in, width=8, padx=5, pady=5, anchor=tk.NE, justify=tk.LEFT,
             background=self.background_color, foreground=self.label_color, font=tk_font.Font(size=self.FONT_STUFF),
             text='altitude'
         )
-        frame_titles_empty.pack(side='left')
-        frame_titles_wind_dir = tk.Label(frame_titles, width=9, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        frame_titles_empty.pack(side=tk.LEFT)
+        frame_titles_wind_dir = tk.Label(frame_titles_in, width=9, padx=5, pady=5, anchor=tk.NE, justify=tk.LEFT,
             background=self.background_color, foreground=self.label_color, font=tk_font.Font(size=self.FONT_STUFF),
             text='wind from'
         )
-        frame_titles_wind_dir.pack(side='left')
-        frame_titles_wind_speed = tk.Label(frame_titles, width=6, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        frame_titles_wind_dir.pack(side=tk.LEFT)
+        frame_titles_wind_speed = tk.Label(frame_titles_in, width=6, padx=5, pady=5, anchor=tk.NE, justify=tk.LEFT,
             background=self.background_color, foreground=self.label_color, font=tk_font.Font(size=self.FONT_STUFF),
             text='speed'
         )
-        frame_titles_wind_speed.pack(side='left')
-        frame_titles_temp = tk.Label(frame_titles, width=10, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        frame_titles_wind_speed.pack(side=tk.LEFT)
+        frame_titles_temp = tk.Label(frame_titles_in, width=5, padx=5, pady=5, anchor=tk.NE, justify=tk.LEFT,
             background=self.background_color, foreground=self.label_color, font=tk_font.Font(size=self.FONT_STUFF),
             text='temp'
         )
-        frame_titles_temp.pack(side='left')
+        frame_titles_temp.pack()
 
         for alt in self.ALTITUDES:
             self.create_line(alt)
 
         self.v_upd = tk.StringVar()
         self.v_upd.set('- ? -')
+
         frame_upd = tk.Frame(self.frame_main, background=self.background_color)
-        frame_upd.pack(side='top', fill=tk.X)
-        frame_upd_label = tk.Label(frame_upd, width=1, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        frame_upd.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        frame_upd_in = tk.Frame(frame_upd)
+        frame_upd_in.place(anchor=tk.CENTER, relx=.5, rely=.5)
+
+        frame_upd_label = tk.Label(frame_upd_in, width=1, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.label_color, font=tk_font.Font(size=self.FONT_STUFF),
             text='⇄'
         )
-        frame_upd_label.pack(side='left')
-        label_upd = tk.Label(frame_upd, width=15, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        frame_upd_label.pack(side=tk.LEFT)
+        label_upd = tk.Label(frame_upd_in, width=15, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground='yellow', font=tk_font.Font(size=int(self.FONT_STUFF)),
             textvariable=self.v_upd,
         )
-        label_upd.pack(side='left')
+        label_upd.pack(side=tk.LEFT)
 
         self.v_sun_up = tk.StringVar()
         self.v_sun_up.set("UU:UU")
         self.v_sun_down = tk.StringVar()
         self.v_sun_down.set("DD:DD")
-        frame_sun_up_label = tk.Label(frame_upd, width=3, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        frame_sun_up_label = tk.Label(frame_upd_in, width=3, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.label_color, font=tk_font.Font(size=self.FONT_STUFF),
             text='☼↑'
         )
-        frame_sun_up_label.pack(side='left')
-        frame_sun_up_value = tk.Label(frame_upd, width=5, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        frame_sun_up_label.pack(side=tk.LEFT)
+        frame_sun_up_value = tk.Label(frame_upd_in, width=5, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.text_color, font=tk_font.Font(size=self.FONT_STUFF),
             textvariable=self.v_sun_up
         )
-        frame_sun_up_value.pack(side='left')
-        frame_sun_down_label = tk.Label(frame_upd, width=3, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        frame_sun_up_value.pack(side=tk.LEFT)
+        frame_sun_down_label = tk.Label(frame_upd_in, width=3, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.label_color, font=tk_font.Font(size=self.FONT_STUFF),
             text='☼↓'
         )
-        frame_sun_down_label.pack(side='left')
-        frame_sun_down_value = tk.Label(frame_upd, width=5, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        frame_sun_down_label.pack(side=tk.LEFT)
+        frame_sun_down_value = tk.Label(frame_upd_in, width=5, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.text_color, font=tk_font.Font(size=self.FONT_STUFF),
             textvariable=self.v_sun_down
         )
-        frame_sun_down_value.pack(side='left')
+        frame_sun_down_value.pack(side=tk.LEFT)
 
 
     def invoke_switch_windows(self):
@@ -200,7 +209,7 @@ class Application(tk.Frame):
 
         self.frame_main.pack_forget()
         if self.state == self.STATE_MAIN:
-            self.frame_main.pack(side='top', fill=tk.BOTH, expand=True)
+            self.frame_main.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         else:
             pass
 
