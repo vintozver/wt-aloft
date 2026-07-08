@@ -2,6 +2,7 @@ import tkinter as tk
 import tkinter.font as tk_font
 import requests
 import time
+import math
 import logging
 import datetime
 import dateutil
@@ -85,7 +86,7 @@ class Application(tk.Frame):
 
         frame = tk.Frame(self.frame_main, background=self.background_color)
         frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-        frame_in = tk.Frame(frame)
+        frame_in = tk.Frame(frame, background=self.background_color)
         frame_in.place(anchor=tk.CENTER, relx=.5, rely=.5)
 
         frame_label = tk.Label(frame_in, width=8, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
@@ -93,7 +94,14 @@ class Application(tk.Frame):
             text=alt_str
         )
         frame_label.pack(side=tk.LEFT)
-        label_wind_dir = tk.Label(frame_in, width=9, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+
+        canvas_wind_dir = tk.Canvas(frame_in, width=32, height=32, background=self.background_color,
+            highlightthickness=0, borderwidth=0
+        )
+        canvas_wind_dir.pack(side=tk.LEFT)
+        setattr(self, 'v_%dk_wind_dir_arrow' % alt, canvas_wind_dir)
+
+        label_wind_dir = tk.Label(frame_in, width=7, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.text_color, font=tk_font.Font(size=self.FONT_STUFF),
             textvariable=getattr(self, 'v_%dk_wind_dir' % alt),
         )
@@ -111,9 +119,22 @@ class Application(tk.Frame):
 
     def update_line(self, alt: int, directions: dict, speeds: dict, temps: dict):
         k = '%d' % (alt * 1000)
-        getattr(self, 'v_%dk_wind_dir' % alt).set('%d°' % directions[k])
+        wind_dir = directions[k]
+        getattr(self, 'v_%dk_wind_dir' % alt).set('%d°' % wind_dir)
         getattr(self, 'v_%dk_wind_spd' % alt).set('%dkts' % speeds[k])
         getattr(self, 'v_%dk_temp' % alt).set('%d °C' % temps[k])
+        wind_canvas = getattr(self, 'v_%dk_wind_dir_arrow' % alt)
+        wind_canvas.delete(tk.ALL)
+        sina = math.sin(math.radians(wind_dir))
+        cosa = math.cos(math.radians(wind_dir))
+        wind_canvas.create_line(
+            16 * (1.0 - sina),
+            16 * (1.0 + cosa),
+            16 * (1.0 + sina),
+            16 * (1.0 - cosa),
+            arrow=tk.FIRST,
+            fill=self.text_color
+        )
 
     def create_widgets(self):
         self.frame_main = tk.Frame(self, background=self.background_color)
