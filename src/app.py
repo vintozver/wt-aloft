@@ -23,11 +23,17 @@ class Application(tk.Frame):
     header_color = 'red'
     label_color = 'green'
 
-    def __init__(self, latitude: float, longitude: float, font_title: int, font_stuff: int, altitudes: list[int], master=None):
+    def __init__(self,
+        latitude: float, longitude: float,
+        font_title: int, font_stuff: int,
+        altitudes: list[int],
+        wt_update_interval: int, master=None
+    ):
         self.FONT_TITLE = font_title
         self.FONT_STUFF = font_stuff
         self.ALTITUDES = altitudes
         self.tz = pytz.timezone('America/Los_Angeles')
+        self.wt_update_interval = wt_update_interval * 1000
 
         self.wt_uri = urllib.parse.urlunsplit((
             'https', 'www.markschulze.net', '/winds/winds_openmeteo.php',
@@ -268,7 +274,7 @@ class Application(tk.Frame):
                 log.info('not updating widgets (result is None)')
 
             # next update - regardless of the error
-            self.master.after(60000, self.update_wt)
+            self.master.after(self.wt_update_interval, self.update_wt)
 
     def update_sun(self):
         result = None
@@ -328,13 +334,19 @@ if __name__ == '__main__':
         default='15,12,9,6,3,0',
         help='Comma separated list of altitudes in thousands of feet each'
     )
+    parser.add_argument('--wt-update-interval', type=int, default=60, help='WindsTemps update interval (seconds)')
     args = parser.parse_args()
 
     root = tk.Tk()
     if args.geometry is not None:
         root.geometry(args.geometry)
     root.after(0, lambda: root.attributes('-fullscreen', True))
-    app = Application(args.latitude, args.longitude, args.font_title, args.font_stuff, args.altitudes, master=root)
+    app = Application(
+        args.latitude, args.longitude,
+        args.font_title, args.font_stuff, args.altitudes,
+        args.wt_update_interval,
+        master=root
+    )
     log.setLevel(logging.DEBUG)
     log.critical("Entering application mainloop")
     app.mainloop()
