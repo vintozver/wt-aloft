@@ -318,10 +318,11 @@ if __name__ == '__main__':
 
     import argparse
     parser = argparse.ArgumentParser(prog='wt_aloft')
+    parser.add_argument('--geometry', type=str, help='Geometry to set initially. Fixes the bug with the slow hosts.')
     parser.add_argument('--font-title', type=int, default=85, help='Title font size')
     parser.add_argument('--font-stuff', type=int, default=65, help='Stuff font size')
-    parser.add_argument('--latitude', type=float, default=46.4772, help='GPS latitude in degrees (decimal with dot)')
-    parser.add_argument('--longitude', type=float, default=-122.8064, help='GPS longitude in degrees (decimal with dot)')
+    parser.add_argument('--latitude', type=float, required=True, help='GPS latitude in degrees (decimal with dot)')
+    parser.add_argument('--longitude', type=float, required=True, help='GPS longitude in degrees (decimal with dot)')
     parser.add_argument('--altitudes',
         type=lambda val: [int(item.strip()) for item in val.split(",")],
         default='15,12,9,6,3,0',
@@ -330,6 +331,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     root = tk.Tk()
+    if args.geometry is not None:
+        root.geometry(args.geometry)
     root.after(0, lambda: root.attributes('-fullscreen', True))
     app = Application(args.latitude, args.longitude, args.font_title, args.font_stuff, args.altitudes, master=root)
     log.setLevel(logging.DEBUG)
