@@ -69,7 +69,7 @@ class Application(tk.Frame):
         self.master.after(0, self.check)
         self.master.after(0, self.update_wt)
         self.master.after(0, self.update_sun)
-        self.master.after(0, self.invoke_switch_windows)
+        self.master.after(self.state_switch_interval, self.invoke_switch_windows)
 
     def check(self):
         self.master.after(100, self.check)
