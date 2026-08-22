@@ -16,7 +16,8 @@ log = logging.getLogger(__name__)
 
 class Application(tk.Frame):
     STATE_MAIN = 0
-    _STATE_DELIMITER = 1
+    STATE_ALTERNATE = 1
+    _STATE_DELIMITER = 2
 
     background_color = 'black'
     text_color = 'white'
@@ -53,8 +54,9 @@ class Application(tk.Frame):
 
         self.shutdown_event = False
 
-        for alt in self.ALTITUDES:
-            self.create_vars(alt)
+        for state in range(self._STATE_DELIMITER):
+            for alt in self.ALTITUDES:
+                self.create_vars(state, alt)
 
         self.state = 0
 
@@ -71,18 +73,18 @@ class Application(tk.Frame):
     def check(self):
         self.master.after(100, self.check)
 
-    def create_vars(self, alt: int):
+    def create_vars(self, state: int, alt: int):
         v_wind_spd = tk.StringVar()
-        setattr(self, 'v_%dk_wind_spd' % alt, v_wind_spd)
+        setattr(self, 'v_%d_%dk_wind_spd' % (state, alt), v_wind_spd)
         v_wind_spd.set('?%dWS' % alt)
         v_wind_dir = tk.StringVar()
-        setattr(self, 'v_%dk_wind_dir' % alt, v_wind_dir)
+        setattr(self, 'v_%d_%dk_wind_dir' % (state, alt), v_wind_dir)
         v_wind_dir.set('?%dWD' % alt)
         v_temp = tk.StringVar()
-        setattr(self, 'v_%dk_temp' % alt, v_temp)
+        setattr(self, 'v_%d_%dk_temp' % (state, alt), v_temp)
         v_temp.set('?%dT' % alt)
 
-    def create_line(self, alt: int):
+    def create_line(self, frame_main, state: int, alt: int):
         # alt is thousands of feet without 'k' suffix
 
         if alt > 0:
@@ -90,7 +92,7 @@ class Application(tk.Frame):
         else:
             alt_str = 'ground'
 
-        frame = tk.Frame(self.frame_main, background=self.background_color)
+        frame = tk.Frame(frame_main, background=self.background_color)
         frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         frame_in = tk.Frame(frame, background=self.background_color)
         frame_in.place(anchor=tk.CENTER, relx=.5, rely=.5)
@@ -105,31 +107,49 @@ class Application(tk.Frame):
             highlightthickness=0, borderwidth=0
         )
         canvas_wind_dir.pack(side=tk.LEFT)
-        setattr(self, 'v_%dk_wind_dir_arrow' % alt, canvas_wind_dir)
+        setattr(self, 'v_%d_%dk_wind_dir_arrow' % (state, alt), canvas_wind_dir)
 
         label_wind_dir = tk.Label(frame_in, width=7, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.text_color, font=tk_font.Font(size=self.FONT_STUFF),
-            textvariable=getattr(self, 'v_%dk_wind_dir' % alt),
+            textvariable=getattr(self, 'v_%d_%dk_wind_dir' % (state, alt)),
         )
         label_wind_dir.pack(side=tk.LEFT)
         label_wind_spd = tk.Label(frame_in, width=6, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.text_color, font=tk_font.Font(size=self.FONT_STUFF),
-            textvariable=getattr(self, 'v_%dk_wind_spd' % alt),
+            textvariable=getattr(self, 'v_%d_%dk_wind_spd' % (state, alt)),
         )
         label_wind_spd.pack(side=tk.LEFT)
         label_temp = tk.Label(frame_in, width=5, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.text_color, font=tk_font.Font(size=self.FONT_STUFF),
-            textvariable=getattr(self, 'v_%dk_temp' % alt),
+            textvariable=getattr(self, 'v_%d_%dk_temp' % (state, alt)),
         )
         label_temp.pack(side=tk.LEFT)
 
-    def update_line(self, alt: int, directions: dict, speeds: dict, temps: dict):
+    @staticmethod
+    def format_temperature(temperature: int, state: int) -> str:
+        if state == Application.STATE_ALTERNATE:
+            return '%d °F' % round(temperature * 9 / 5 + 32)
+        return '%d °C' % temperature
+
+    @staticmethod
+    def format_wind_speed(speed: int, state: int) -> str:
+        if state == Application.STATE_ALTERNATE:
+            return '%dmph' % round(speed * 1.15078)
+        return '%dkts' % speed
+
+    @staticmethod
+    def format_time(value: datetime.datetime, state: int) -> str:
+        if state == Application.STATE_ALTERNATE:
+            return value.strftime('%I:%M %p').lstrip('0')
+        return value.strftime('%H:%M')
+
+    def update_line(self, state: int, alt: int, directions: dict, speeds: dict, temps: dict):
         k = '%d' % (alt * 1000)
         wind_dir = directions[k]
-        getattr(self, 'v_%dk_wind_dir' % alt).set('%d°' % wind_dir)
-        getattr(self, 'v_%dk_wind_spd' % alt).set('%dkts' % speeds[k])
-        getattr(self, 'v_%dk_temp' % alt).set('%d °C' % temps[k])
-        wind_canvas = getattr(self, 'v_%dk_wind_dir_arrow' % alt)
+        getattr(self, 'v_%d_%dk_wind_dir' % (state, alt)).set('%d°' % wind_dir)
+        getattr(self, 'v_%d_%dk_wind_spd' % (state, alt)).set(self.format_wind_speed(speeds[k], state))
+        getattr(self, 'v_%d_%dk_temp' % (state, alt)).set(self.format_temperature(temps[k], state))
+        wind_canvas = getattr(self, 'v_%d_%dk_wind_dir_arrow' % (state, alt))
         wind_canvas.delete(tk.ALL)
         sina = math.sin(math.radians(wind_dir))
         cosa = math.cos(math.radians(wind_dir))
@@ -143,9 +163,15 @@ class Application(tk.Frame):
         )
 
     def create_widgets(self):
-        self.frame_main = tk.Frame(self, background=self.background_color)
+        self.frames = {}
+        for state in range(self._STATE_DELIMITER):
+            self.create_page(state)
+
+    def create_page(self, state: int):
+        frame_main = tk.Frame(self, background=self.background_color)
+        self.frames[state] = frame_main
         top_label = tk.Label(
-            self.frame_main,
+            frame_main,
             padx=5,
             pady=5,
             justify=tk.CENTER,
@@ -156,7 +182,7 @@ class Application(tk.Frame):
         )
         top_label.pack(side=tk.TOP, fill=tk.X)
 
-        frame_titles = tk.Frame(self.frame_main, background=self.background_color)
+        frame_titles = tk.Frame(frame_main, background=self.background_color)
         frame_titles.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         frame_titles_in = tk.Frame(frame_titles)
         frame_titles_in.place(anchor=tk.CENTER, relx=.5, rely=.5)
@@ -182,12 +208,13 @@ class Application(tk.Frame):
         frame_titles_temp.pack()
 
         for alt in self.ALTITUDES:
-            self.create_line(alt)
+            self.create_line(frame_main, state, alt)
 
-        self.v_upd = tk.StringVar()
-        self.v_upd.set('- ? -')
+        v_upd = tk.StringVar()
+        setattr(self, 'v_%d_upd' % state, v_upd)
+        v_upd.set('- ? -')
 
-        frame_upd = tk.Frame(self.frame_main, background=self.background_color)
+        frame_upd = tk.Frame(frame_main, background=self.background_color)
         frame_upd.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         frame_upd_in = tk.Frame(frame_upd)
         frame_upd_in.place(anchor=tk.CENTER, relx=.5, rely=.5)
@@ -197,24 +224,28 @@ class Application(tk.Frame):
             text='⇄'
         )
         frame_upd_label.pack(side=tk.LEFT)
-        label_upd = tk.Label(frame_upd_in, width=15, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        update_width = 18 if state == self.STATE_ALTERNATE else 15
+        label_upd = tk.Label(frame_upd_in, width=update_width, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground='yellow', font=tk_font.Font(size=int(self.FONT_STUFF)),
-            textvariable=self.v_upd,
+            textvariable=v_upd,
         )
         label_upd.pack(side=tk.LEFT)
 
-        self.v_sun_up = tk.StringVar()
-        self.v_sun_up.set("UU:UU")
-        self.v_sun_down = tk.StringVar()
-        self.v_sun_down.set("DD:DD")
+        v_sun_up = tk.StringVar()
+        setattr(self, 'v_%d_sun_up' % state, v_sun_up)
+        v_sun_up.set("UU:UU")
+        v_sun_down = tk.StringVar()
+        setattr(self, 'v_%d_sun_down' % state, v_sun_down)
+        v_sun_down.set("DD:DD")
         frame_sun_up_label = tk.Label(frame_upd_in, width=3, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.label_color, font=tk_font.Font(size=self.FONT_STUFF),
             text='☼↑'
         )
         frame_sun_up_label.pack(side=tk.LEFT)
-        frame_sun_up_value = tk.Label(frame_upd_in, width=5, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        time_width = 8 if state == self.STATE_ALTERNATE else 5
+        frame_sun_up_value = tk.Label(frame_upd_in, width=time_width, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.text_color, font=tk_font.Font(size=self.FONT_STUFF),
-            textvariable=self.v_sun_up
+            textvariable=v_sun_up
         )
         frame_sun_up_value.pack(side=tk.LEFT)
         frame_sun_down_label = tk.Label(frame_upd_in, width=3, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
@@ -222,9 +253,9 @@ class Application(tk.Frame):
             text='☼↓'
         )
         frame_sun_down_label.pack(side=tk.LEFT)
-        frame_sun_down_value = tk.Label(frame_upd_in, width=5, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        frame_sun_down_value = tk.Label(frame_upd_in, width=time_width, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.text_color, font=tk_font.Font(size=self.FONT_STUFF),
-            textvariable=self.v_sun_down
+            textvariable=v_sun_down
         )
         frame_sun_down_value.pack(side=tk.LEFT)
 
@@ -234,12 +265,9 @@ class Application(tk.Frame):
             log.warning("switch_windows invoked but shutdown is requested. noop, return")
             return
 
-        self.frame_main.pack_forget()
-        if self.state == self.STATE_MAIN:
-            self.frame_main.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-        else:
-            pass
-
+        for frame in self.frames.values():
+            frame.pack_forget()
+        self.frames[self.state].pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         self.state = (self.state + 1) % self._STATE_DELIMITER
 
     def invoke_quit(self):
@@ -267,9 +295,13 @@ class Application(tk.Frame):
         finally:
             if result is not None:
                 log.info('updating widgets')
-                for alt in self.ALTITUDES:
-                    self.update_line(alt, result["direction"], result["speed"], result["temp"])
-                self.v_upd.set(datetime.datetime.now(self.tz).strftime('%Y-%m-%d %H:%M'))
+                update_time = datetime.datetime.now(self.tz)
+                for state in range(self._STATE_DELIMITER):
+                    for alt in self.ALTITUDES:
+                        self.update_line(state, alt, result["direction"], result["speed"], result["temp"])
+                    getattr(self, 'v_%d_upd' % state).set(
+                        update_time.strftime('%Y-%m-%d ') + self.format_time(update_time, state)
+                    )
             else:
                 log.info('not updating widgets (result is None)')
 
@@ -298,8 +330,9 @@ class Application(tk.Frame):
                     sunrise = datetime.datetime.fromisoformat(result['results']['sunrise'])
                     sunset = datetime.datetime.fromisoformat(result['results']['sunset'])
                     log.info('updating widgets')
-                    self.v_sun_up.set(sunrise.strftime('%H:%M'))
-                    self.v_sun_down.set(sunset.strftime('%H:%M'))
+                    for state in range(self._STATE_DELIMITER):
+                        getattr(self, 'v_%d_sun_up' % state).set(self.format_time(sunrise, state))
+                        getattr(self, 'v_%d_sun_down' % state).set(self.format_time(sunset, state))
 
                     # updating once per day in the beginning of the day in the current timezone
                     dt = datetime.datetime.now(self.tz)
@@ -351,4 +384,3 @@ if __name__ == '__main__':
     log.critical("Entering application mainloop")
     app.mainloop()
     log.critical("Exiting application mainloop")
-
