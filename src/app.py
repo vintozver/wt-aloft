@@ -5,7 +5,7 @@ import time
 import math
 import logging
 import datetime
-import dateutil
+from dateutil import relativedelta
 import json
 import pytz
 import urllib.parse
@@ -344,7 +344,7 @@ class Application(tk.Frame):
 
                     # updating once per day in the beginning of the day in the current timezone
                     dt = datetime.datetime.now(self.tz)
-                    next_upd = int((dt + dateutil.relativedelta.relativedelta(days=1, hour=0, minute=0, second=0) - dt).total_seconds())
+                    next_upd = int((dt + relativedelta.relativedelta(days=1, hour=0, minute=0, second=0) - dt).total_seconds())
                     log.info('update_sun scheduling next update in %d seconds' % next_upd)
                     self.master.after(next_upd * 1000, self.update_sun)
                     return
