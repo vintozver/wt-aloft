@@ -28,13 +28,14 @@ class Application(tk.Frame):
         latitude: float, longitude: float,
         font_title: int, font_stuff: int,
         altitudes: list[int],
-        wt_update_interval: int, master=None
+        wt_update_interval: int, state_switch_interval: int, master=None
     ):
         self.FONT_TITLE = font_title
         self.FONT_STUFF = font_stuff
         self.ALTITUDES = altitudes
         self.tz = pytz.timezone('America/Los_Angeles')
         self.wt_update_interval = wt_update_interval * 1000
+        self.state_switch_interval = state_switch_interval * 1000
 
         self.wt_uri = urllib.parse.urlunsplit((
             'https', 'www.markschulze.net', '/winds/winds_openmeteo.php',
@@ -270,6 +271,7 @@ class Application(tk.Frame):
             frame.pack_forget()
         self.frames[self.state].pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         self.state = (self.state + 1) % self._STATE_DELIMITER
+        self.master.after(self.state_switch_interval, self.invoke_switch_windows)
 
     def invoke_quit(self):
         log.info("quit enter")
@@ -369,6 +371,7 @@ if __name__ == '__main__':
         help='Comma separated list of altitudes in thousands of feet each'
     )
     parser.add_argument('--wt-update-interval', type=int, default=60, help='WindsTemps update interval (seconds)')
+    parser.add_argument('--state-switch-interval', type=int, default=30, help='Display state switch interval (seconds)')
     args = parser.parse_args()
 
     root = tk.Tk()
@@ -378,7 +381,7 @@ if __name__ == '__main__':
     app = Application(
         args.latitude, args.longitude,
         args.font_title, args.font_stuff, args.altitudes,
-        args.wt_update_interval,
+        args.wt_update_interval, args.state_switch_interval,
         master=root
     )
     log.setLevel(logging.DEBUG)
