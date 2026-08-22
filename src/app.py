@@ -140,7 +140,8 @@ class Application(tk.Frame):
     @staticmethod
     def format_time(value: datetime.datetime, state: int) -> str:
         if state == Application.STATE_ALTERNATE:
-            return value.strftime('%I:%M %p').lstrip('0')
+            formatted_time = value.strftime('%I:%M %p')
+            return formatted_time[1:] if formatted_time.startswith('0') else formatted_time
         return value.strftime('%H:%M')
 
     def update_line(self, state: int, alt: int, directions: dict, speeds: dict, temps: dict):
