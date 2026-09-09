@@ -35,7 +35,7 @@ class Application(tk.Frame):
     ):
         self.FONT_TITLE = font_title
         self.FONT_STUFF = font_stuff
-        self.WIND_ARROW_SZ = font_stuff * 0.75
+        self.WIND_ARROW_SZ = font_stuff / 2
         self.ALTITUDES = altitudes
         self.tz = pytz.timezone('America/Los_Angeles')
         self.wt_update_interval = wt_update_interval * 1000
@@ -115,7 +115,7 @@ class Application(tk.Frame):
         )
         frame_label.pack(side=tk.LEFT)
 
-        canvas_wind_dir = tk.Canvas(frame_in, width=32, height=32, background=self.background_color,
+        canvas_wind_dir = tk.Canvas(frame_in, width=self.FONT_STUFF, height=self.FONT_STUFF, background=self.background_color,
             highlightthickness=0, borderwidth=0
         )
         canvas_wind_dir.pack(side=tk.LEFT)
@@ -295,7 +295,7 @@ class Application(tk.Frame):
         frame_titles.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         frame_titles_in = tk.Frame(frame_titles)
         frame_titles_in.place(anchor=tk.CENTER, relx=.5, rely=.5)
-        for title, width in (('aircraft', 12), ('altitude', 10), ('speed', 8), ('status', 8)):
+        for title, width in (('aircraft', 8), ('altitude', 10), ('speed', 6), ('status', 6)):
             label = tk.Label(
                 frame_titles_in, width=width, padx=5, pady=5, anchor=tk.NE,
                 justify=tk.LEFT, background=self.background_color,
@@ -312,7 +312,7 @@ class Application(tk.Frame):
             frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
             frame_in = tk.Frame(frame)
             frame_in.place(anchor=tk.CENTER, relx=.5, rely=.5)
-            for variable, width in zip(variables, (12, 10, 8, 8)):
+            for variable, width in zip(variables, (8, 10, 6, 6)):
                 label = tk.Label(
                     frame_in, width=width, padx=5, pady=5, anchor=tk.E,
                     justify=tk.LEFT, background=self.background_color,
