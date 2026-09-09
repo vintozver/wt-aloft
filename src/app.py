@@ -35,6 +35,7 @@ class Application(tk.Frame):
     ):
         self.FONT_TITLE = font_title
         self.FONT_STUFF = font_stuff
+        self.WIND_ARROW_SZ = font_stuff * 0.75
         self.ALTITUDES = altitudes
         self.tz = pytz.timezone('America/Los_Angeles')
         self.wt_update_interval = wt_update_interval * 1000
@@ -166,10 +167,10 @@ class Application(tk.Frame):
         sina = math.sin(math.radians(wind_dir))
         cosa = math.cos(math.radians(wind_dir))
         wind_canvas.create_line(
-            16 * (1.0 - sina),
-            16 * (1.0 + cosa),
-            16 * (1.0 + sina),
-            16 * (1.0 - cosa),
+            self.WIND_ARROW_SZ * (1.0 - sina),
+            self.WIND_ARROW_SZ * (1.0 + cosa),
+            self.WIND_ARROW_SZ * (1.0 + sina),
+            self.WIND_ARROW_SZ * (1.0 - cosa),
             arrow=tk.FIRST,
             fill=self.text_color
         )
