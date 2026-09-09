@@ -452,16 +452,28 @@ class Application(tk.Frame):
         return '%d ft' % round(altitude), '%d kts' % round(speed), status
 
     def update_aircraft(self):
-        for registration, alias in self.aircraft:
-            value = None
-            uri = 'https://opendata.adsb.fi/api/v2/registration/' + urllib.parse.quote(registration)
-            try:
-                response = requests.get(uri, timeout=10)
-                response.raise_for_status()
-                value = self.parse_aircraft_data(response.json())
-            except (requests.exceptions.RequestException, ValueError, TypeError, KeyError) as err:
-                log.info('Aircraft %s update failed: %s', registration, err)
+        if not self.aircraft:
+            self.master.after(self.aircraft_update_interval, self.update_aircraft)
+            return
 
+        values_by_registration = {}
+        registrations = ','.join(registration for registration, _ in self.aircraft)
+        uri = 'https://opendata.adsb.fi/api/v2/registration/' + urllib.parse.quote(registrations, safe=',')
+        try:
+            response = requests.get(uri, timeout=10)
+            response.raise_for_status()
+            result = response.json()
+            records = result.get('ac', result.get('aircraft', []))
+            values_by_registration = {
+                record.get('r'): self.parse_aircraft_data({'ac': [record]})
+                for record in records
+                if isinstance(record, dict) and record.get('r') in self.aircraft_history
+            }
+        except (requests.exceptions.RequestException, ValueError, TypeError, KeyError, AttributeError) as err:
+            log.info('Aircraft update failed: %s', err)
+
+        for registration, alias in self.aircraft:
+            value = values_by_registration.get(registration)
             self.aircraft_history[registration].append(value)
             if registration not in self.aircraft_vars:
                 continue
