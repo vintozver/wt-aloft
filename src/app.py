@@ -221,13 +221,12 @@ class Application(tk.Frame):
         frame_upd_in = tk.Frame(frame_upd)
         frame_upd_in.place(anchor=tk.CENTER, relx=.5, rely=.5)
 
-        frame_upd_label = tk.Label(frame_upd_in, width=1, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        frame_upd_label = tk.Label(frame_upd_in, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.label_color, font=tk_font.Font(size=self.FONT_STUFF),
             text='⇄'
         )
         frame_upd_label.pack(side=tk.LEFT)
-        update_width = 18 if state == self.STATE_ALTERNATE else 15
-        label_upd = tk.Label(frame_upd_in, width=update_width, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        label_upd = tk.Label(frame_upd_in, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground='yellow', font=tk_font.Font(size=int(self.FONT_STUFF)),
             textvariable=v_upd,
         )
@@ -239,23 +238,22 @@ class Application(tk.Frame):
         v_sun_down = tk.StringVar()
         setattr(self, 'v_%d_sun_down' % state, v_sun_down)
         v_sun_down.set("DD:DD")
-        frame_sun_up_label = tk.Label(frame_upd_in, width=3, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        frame_sun_up_label = tk.Label(frame_upd_in, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.label_color, font=tk_font.Font(size=self.FONT_STUFF),
             text='☼↑'
         )
         frame_sun_up_label.pack(side=tk.LEFT)
-        time_width = 8 if state == self.STATE_ALTERNATE else 5
-        frame_sun_up_value = tk.Label(frame_upd_in, width=time_width, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        frame_sun_up_value = tk.Label(frame_upd_in, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.text_color, font=tk_font.Font(size=self.FONT_STUFF),
             textvariable=v_sun_up
         )
         frame_sun_up_value.pack(side=tk.LEFT)
-        frame_sun_down_label = tk.Label(frame_upd_in, width=3, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        frame_sun_down_label = tk.Label(frame_upd_in, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.label_color, font=tk_font.Font(size=self.FONT_STUFF),
             text='☼↓'
         )
         frame_sun_down_label.pack(side=tk.LEFT)
-        frame_sun_down_value = tk.Label(frame_upd_in, width=time_width, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
+        frame_sun_down_value = tk.Label(frame_upd_in, padx=5, pady=5, anchor=tk.E, justify=tk.LEFT,
             background=self.background_color, foreground=self.text_color, font=tk_font.Font(size=self.FONT_STUFF),
             textvariable=v_sun_down
         )
