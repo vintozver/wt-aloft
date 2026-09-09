@@ -68,7 +68,7 @@ class Application(tk.Frame):
             for alt in self.ALTITUDES:
                 self.create_vars(state, alt)
 
-        self.state = 0
+        self.state = -1
 
         self.master = master
         self.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
@@ -79,7 +79,7 @@ class Application(tk.Frame):
         self.master.after(0, self.update_wt)
         self.master.after(0, self.update_sun)
         self.master.after(0, self.update_aircraft)
-        self.master.after(self.state_switch_interval, self.invoke_switch_windows)
+        self.master.after(0, self.invoke_switch_windows)
 
     def check(self):
         self.master.after(100, self.check)
@@ -346,8 +346,8 @@ class Application(tk.Frame):
 
         for frame in self.frames.values():
             frame.pack_forget()
-        self.frames[self.state].pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         self.state = (self.state + 1) % self._STATE_DELIMITER
+        self.frames[self.state].pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         self.master.after(self.state_switch_interval, self.invoke_switch_windows)
 
     def invoke_quit(self):
