@@ -64,7 +64,7 @@ class Application(tk.Frame):
 
         self.shutdown_event = False
 
-        for state in range(self._STATE_DELIMITER):
+        for state in (self.STATE_MAIN, self.STATE_ALTERNATE):
             for alt in self.ALTITUDES:
                 self.create_vars(state, alt)
 
@@ -176,10 +176,11 @@ class Application(tk.Frame):
 
     def create_widgets(self):
         self.frames = {}
-        for state in range(self._STATE_DELIMITER):
-            self.create_page(state)
+        self.create_main_page()
+        self.create_alternate_page()
+        self.create_aircraft_page()
 
-    def create_page(self, state: int):
+    def create_page(self, state: int, title: str, create):
         frame_main = tk.Frame(self, background=self.background_color)
         self.frames[state] = frame_main
         top_label = tk.Label(
@@ -190,14 +191,29 @@ class Application(tk.Frame):
             background=self.background_color,
             foreground=self.header_color,
             font=tk_font.Font(size=self.FONT_TITLE),
-            text='Aircraft statuses' if state == self.STATE_AIRCRAFT else 'Winds and Temps aloft'
+            text=title
         )
         top_label.pack(side=tk.TOP, fill=tk.X)
+        create(frame_main, state)
 
-        if state == self.STATE_AIRCRAFT:
-            self.create_aircraft_page(frame_main)
-            return
+    def create_main_page(self):
+        self.create_page(self.STATE_MAIN, 'Winds and Temps aloft', self.create_winds_page)
 
+    def create_alternate_page(self):
+        self.create_page(self.STATE_ALTERNATE, 'Winds and Temps aloft', self.create_winds_page)
+
+    def create_aircraft_page(self):
+        frame_main = tk.Frame(self, background=self.background_color)
+        self.frames[self.STATE_AIRCRAFT] = frame_main
+        top_label = tk.Label(
+            frame_main, padx=5, pady=5, justify=tk.CENTER,
+            background=self.background_color, foreground=self.header_color,
+            font=tk_font.Font(size=self.FONT_TITLE), text='Aircraft statuses'
+        )
+        top_label.pack(side=tk.TOP, fill=tk.X)
+        self.create_aircraft_widgets(frame_main)
+
+    def create_winds_page(self, frame_main, state):
         frame_titles = tk.Frame(frame_main, background=self.background_color)
         frame_titles.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         frame_titles_in = tk.Frame(frame_titles)
@@ -273,7 +289,7 @@ class Application(tk.Frame):
         )
         frame_sun_down_value.pack(side=tk.LEFT)
 
-    def create_aircraft_page(self, frame_main):
+    def create_aircraft_widgets(self, frame_main):
         frame_titles = tk.Frame(frame_main, background=self.background_color)
         frame_titles.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         frame_titles_in = tk.Frame(frame_titles)
@@ -360,7 +376,7 @@ class Application(tk.Frame):
             if result is not None:
                 log.info('updating widgets')
                 update_time = datetime.datetime.now(self.tz)
-                for state in range(self._STATE_DELIMITER):
+                for state in (self.STATE_MAIN, self.STATE_ALTERNATE):
                     for alt in self.ALTITUDES:
                         self.update_line(state, alt, result["direction"], result["speed"], result["temp"])
                     getattr(self, 'v_%d_upd' % state).set(
@@ -394,7 +410,7 @@ class Application(tk.Frame):
                     sunrise = datetime.datetime.fromisoformat(result['results']['sunrise'])
                     sunset = datetime.datetime.fromisoformat(result['results']['sunset'])
                     log.info('updating widgets')
-                    for state in range(self._STATE_DELIMITER):
+                    for state in (self.STATE_MAIN, self.STATE_ALTERNATE):
                         getattr(self, 'v_%d_sun_up' % state).set(self.format_time(sunrise, state))
                         getattr(self, 'v_%d_sun_down' % state).set(self.format_time(sunset, state))
 
