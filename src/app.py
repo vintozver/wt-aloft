@@ -14,11 +14,6 @@ log = logging.getLogger(__name__)
 
 
 class Application(tk.Frame):
-    STATE_MAIN = 0
-    STATE_ALTERNATE = 1
-    STATE_AIRCRAFT = 2
-    _STATE_DELIMITER = 3
-
     WIND_TEMP_UPDATED = '<<WindTempUpdated>>'
     SUN_UPDATED = '<<SunUpdated>>'
     AIRCRAFT_UPDATED = '<<AircraftUpdated>>'
@@ -30,14 +25,14 @@ class Application(tk.Frame):
 
     def __init__(
         self, latitude, longitude, font_title, font_stuff, altitudes,
-        wt_update_interval, state_switch_interval, aircraft, master=None
+        wt_update_interval, state_switch_interval, aircraft,
+        aircraft_update_interval=10, master=None
     ):
         super().__init__(master, background=self.background_color)
         self.tz = pytz.timezone('America/Los_Angeles')
         self.state_switch_interval = state_switch_interval * 1000
-        self.aircraft_update_interval = 10000
         self.shutdown_event = False
-        self.state = -1
+        self.current_screen = None
         self.master = master
         self.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         self.wind_temp_aviation = WindTempAviation(font_title, font_stuff, altitudes, self)
@@ -50,9 +45,8 @@ class Application(tk.Frame):
             self.screens.append(self.aircraft_screen)
             self.aircraft_worker = AircraftWorker(
                 [registration for registration, _ in aircraft],
-                self.aircraft_update_interval / 1000
+                aircraft_update_interval
             )
-        self._state_delimiter = len(self.screens)
         for screen in self.screens:
             screen.pack_forget()
         self.wind_temp_worker = WindTempWorker(latitude, longitude, wt_update_interval)
@@ -87,8 +81,13 @@ class Application(tk.Frame):
             return
         for screen in self.screens:
             screen.pack_forget()
-        self.state = (self.state + 1) % self._state_delimiter
-        self.screens[self.state].pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        if self.current_screen is self.wind_temp_aviation:
+            self.current_screen = self.wind_temp_imperial
+        elif self.current_screen is self.wind_temp_imperial and self.aircraft_screen is not None:
+            self.current_screen = self.aircraft_screen
+        else:
+            self.current_screen = self.wind_temp_aviation
+        self.current_screen.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         self.master.after(self.state_switch_interval, self.invoke_switch_windows)
 
     def invoke_quit(self):
@@ -148,6 +147,8 @@ if __name__ == '__main__':
                         default='15,12,9,6,3,0', help='Comma separated list of altitudes in thousands of feet each')
     parser.add_argument('--wt-update-interval', type=int, default=60, help='WindsTemps update interval (seconds)')
     parser.add_argument('--state-switch-interval', type=int, default=30, help='Display state switch interval (seconds)')
+    parser.add_argument('--aircraft-update-interval', type=int, default=10,
+                        help='Aircraft update interval in seconds')
     parser.add_argument('--aircraft', action='append', type=parse_aircraft, default=[],
                         metavar='REGISTRATION,ALIAS', help='Aircraft registration and display alias; may be repeated')
     args = parser.parse_args()
@@ -156,7 +157,8 @@ if __name__ == '__main__':
         root.geometry(args.geometry)
     root.after(0, lambda: root.attributes('-fullscreen', True))
     app = Application(args.latitude, args.longitude, args.font_title, args.font_stuff, args.altitudes,
-                      args.wt_update_interval, args.state_switch_interval, args.aircraft, master=root)
+                      args.wt_update_interval, args.state_switch_interval, args.aircraft,
+                      aircraft_update_interval=args.aircraft_update_interval, master=root)
     log.setLevel(logging.DEBUG)
     log.critical("Entering application mainloop")
     app.mainloop()

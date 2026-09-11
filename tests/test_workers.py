@@ -60,6 +60,7 @@ class WorkerConfigurationTests(unittest.TestCase):
 
     @mock.patch('src.app.tk.Frame.__init__', return_value=None)
     @mock.patch.object(Application, 'pack')
+    @mock.patch.object(Application, 'bind')
     @mock.patch('src.app.AircraftWorker')
     @mock.patch('src.app.SunWorker')
     @mock.patch('src.app.WindTempWorker')
@@ -68,20 +69,67 @@ class WorkerConfigurationTests(unittest.TestCase):
     @mock.patch('src.app.WindTempAviation')
     def test_application_only_passes_registrations_to_aircraft_worker(
         self, aviation, imperial, aircraft_screen, wind_worker, sun_worker,
-        aircraft_worker, _pack, _frame_init
+        aircraft_worker, _bind, _pack, _frame_init
     ):
         wind_worker.return_value.uri = 'wind-uri'
         sun_worker.return_value.uri = 'sun-uri'
+        master = mock.Mock()
 
         Application(
             47.0, -122.0, 85, 65, [3, 6], 60, 10,
-            [('N123AB', 'Display alias')], master=mock.Mock()
+            [('N123AB', 'Display alias')], aircraft_update_interval=25,
+            master=master
         )
 
         aircraft_screen.assert_called_once_with(
             85, 65, [('N123AB', 'Display alias')], mock.ANY
         )
-        aircraft_worker.assert_called_once_with(['N123AB'], 10)
+        aircraft_worker.assert_called_once_with(['N123AB'], 25)
+        master.after.assert_called_once_with(0, mock.ANY)
+
+    def test_application_cycles_through_screen_references(self):
+        aviation = mock.Mock()
+        imperial = mock.Mock()
+        aircraft = mock.Mock()
+        application = mock.Mock(
+            shutdown_event=False,
+            screens=[aviation, imperial, aircraft],
+            current_screen=None,
+            wind_temp_aviation=aviation,
+            wind_temp_imperial=imperial,
+            aircraft_screen=aircraft,
+            state_switch_interval=30000,
+            master=mock.Mock(),
+        )
+
+        displayed_screens = []
+        for _ in range(4):
+            Application.invoke_switch_windows(application)
+            displayed_screens.append(application.current_screen)
+
+        self.assertEqual(displayed_screens, [aviation, imperial, aircraft, aviation])
+        self.assertEqual(application.master.after.call_count, 4)
+
+    def test_application_cycles_without_aircraft_screen(self):
+        aviation = mock.Mock()
+        imperial = mock.Mock()
+        application = mock.Mock(
+            shutdown_event=False,
+            screens=[aviation, imperial],
+            current_screen=None,
+            wind_temp_aviation=aviation,
+            wind_temp_imperial=imperial,
+            aircraft_screen=None,
+            state_switch_interval=30000,
+            master=mock.Mock(),
+        )
+
+        displayed_screens = []
+        for _ in range(3):
+            Application.invoke_switch_windows(application)
+            displayed_screens.append(application.current_screen)
+
+        self.assertEqual(displayed_screens, [aviation, imperial, aviation])
 
 
 class WindTempTimestampTests(unittest.TestCase):
