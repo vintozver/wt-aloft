@@ -21,7 +21,7 @@ class WorkerConfigurationTests(unittest.TestCase):
         )
         self.assertEqual(
             list(inspect.signature(AircraftWorker).parameters),
-            ['screen', 'interval'],
+            ['registrations', 'interval'],
         )
 
     def test_workers_build_existing_uris(self):
@@ -43,6 +43,45 @@ class WorkerConfigurationTests(unittest.TestCase):
         self.assertFalse(hasattr(wind_worker, 'screens'))
         self.assertFalse(hasattr(wind_worker, 'tz'))
         self.assertFalse(hasattr(sun_worker, 'screens'))
+
+    def test_aircraft_worker_requires_registrations_without_aliases(self):
+        with self.assertRaisesRegex(ValueError, 'registrations must not be empty'):
+            AircraftWorker([], 10)
+
+        worker = AircraftWorker(['N123AB', 'N 456'], 10)
+
+        self.assertEqual(worker.registrations, ['N123AB', 'N 456'])
+        self.assertEqual(
+            worker.uri,
+            'https://opendata.adsb.fi/api/v2/registration/N123AB,N%20456',
+        )
+        self.assertEqual(set(worker.history), {'N123AB', 'N 456'})
+        self.assertFalse(hasattr(worker, 'screen'))
+
+    @mock.patch('src.app.tk.Frame.__init__', return_value=None)
+    @mock.patch.object(Application, 'pack')
+    @mock.patch('src.app.AircraftWorker')
+    @mock.patch('src.app.SunWorker')
+    @mock.patch('src.app.WindTempWorker')
+    @mock.patch('src.app.Aircraft')
+    @mock.patch('src.app.WindTempImperial')
+    @mock.patch('src.app.WindTempAviation')
+    def test_application_only_passes_registrations_to_aircraft_worker(
+        self, aviation, imperial, aircraft_screen, wind_worker, sun_worker,
+        aircraft_worker, _pack, _frame_init
+    ):
+        wind_worker.return_value.uri = 'wind-uri'
+        sun_worker.return_value.uri = 'sun-uri'
+
+        Application(
+            47.0, -122.0, 85, 65, [3, 6], 60, 10,
+            [('N123AB', 'Display alias')], master=mock.Mock()
+        )
+
+        aircraft_screen.assert_called_once_with(
+            85, 65, [('N123AB', 'Display alias')], mock.ANY
+        )
+        aircraft_worker.assert_called_once_with(['N123AB'], 10)
 
 
 class WindTempTimestampTests(unittest.TestCase):

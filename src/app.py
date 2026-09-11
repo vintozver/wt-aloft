@@ -116,14 +116,20 @@ class SunWorker(AsyncWorker):
 
 
 class AircraftWorker(AsyncWorker):
-    def __init__(self, screen, interval):
+    URI = 'https://opendata.adsb.fi/api/v2/registration/'
+
+    def __init__(self, registrations, interval):
+        registrations = list(registrations)
+        if not registrations:
+            raise ValueError('aircraft registrations must not be empty')
         super().__init__('aircraft-worker')
-        self.screen = screen
+        self.registrations = registrations
+        self.uri = self.URI + urllib.parse.quote(','.join(self.registrations), safe=',')
         self.interval = interval
         self.history = {
             registration: deque([None] * 10, maxlen=10)
-            for registration, _ in screen.aircraft
-        } if screen is not None else {}
+            for registration in self.registrations
+        }
         self.data = {}
 
     @staticmethod
@@ -142,25 +148,20 @@ class AircraftWorker(AsyncWorker):
 
     async def run(self):
         while not self.stop_event.is_set():
-            if self.screen is not None:
-                registrations = ','.join(registration for registration, _ in self.screen.aircraft)
-                uri = 'https://opendata.adsb.fi/api/v2/registration/' + urllib.parse.quote(
-                    registrations, safe=','
+            try:
+                response = await asyncio.get_running_loop().run_in_executor(
+                    None, lambda: requests.get(self.uri, timeout=10)
                 )
-                try:
-                    response = await asyncio.get_running_loop().run_in_executor(
-                        None, lambda: requests.get(uri, timeout=10)
-                    )
-                    response.raise_for_status()
-                    result = response.json()
-                    records = result.get('ac', result.get('aircraft', []))
-                    self.data = {
-                        record.get('r'): self.parse_data({'ac': [record]})
-                        for record in records
-                        if isinstance(record, dict) and record.get('r') in self.history
-                    }
-                except (requests.exceptions.RequestException, ValueError, TypeError, KeyError, AttributeError) as err:
-                    log.info('Aircraft update failed: %s', err)
+                response.raise_for_status()
+                result = response.json()
+                records = result.get('ac', result.get('aircraft', []))
+                self.data = {
+                    record.get('r'): self.parse_data({'ac': [record]})
+                    for record in records
+                    if isinstance(record, dict) and record.get('r') in self.history
+                }
+            except (requests.exceptions.RequestException, ValueError, TypeError, KeyError, AttributeError) as err:
+                log.info('Aircraft update failed: %s', err)
             await asyncio.sleep(self.interval)
 
 
@@ -192,18 +193,24 @@ class Application(tk.Frame):
         self.wind_temp_imperial = WindTempImperial(font_title, font_stuff, altitudes, self)
         self.screens = [self.wind_temp_aviation, self.wind_temp_imperial]
         self.aircraft_screen = None
+        self.aircraft_worker = None
         if aircraft:
             self.aircraft_screen = Aircraft(font_title, font_stuff, aircraft, self)
             self.screens.append(self.aircraft_screen)
+            self.aircraft_worker = AircraftWorker(
+                [registration for registration, _ in aircraft],
+                self.aircraft_update_interval / 1000
+            )
         self._state_delimiter = len(self.screens)
         for screen in self.screens:
             screen.pack_forget()
         self.wind_temp_worker = WindTempWorker(latitude, longitude, self.wt_update_interval / 1000)
         self.sun_worker = SunWorker(latitude, longitude, self.tz)
-        self.aircraft_worker = AircraftWorker(self.aircraft_screen, self.aircraft_update_interval / 1000)
         log.info('WT uri: ' + self.wind_temp_worker.uri)
         log.info('Sun uri: ' + self.sun_worker.uri)
-        self.workers = (self.wind_temp_worker, self.sun_worker, self.aircraft_worker)
+        self.workers = (self.wind_temp_worker, self.sun_worker)
+        if self.aircraft_worker is not None:
+            self.workers += (self.aircraft_worker,)
         for worker in self.workers:
             worker.start()
         self.master.after(0, self.check)
