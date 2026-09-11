@@ -7,14 +7,9 @@ import pytz
 import urllib.parse
 from collections import deque
 
-try:
-    from .aircraft import Aircraft
-    from .wind_temp_aviation import WindTempAviation
-    from .wind_temp_imperial import WindTempImperial
-except ImportError:
-    from aircraft import Aircraft
-    from wind_temp_aviation import WindTempAviation
-    from wind_temp_imperial import WindTempImperial
+from .aircraft import Aircraft
+from .wind_temp_aviation import WindTempAviation
+from .wind_temp_imperial import WindTempImperial
 
 
 log = logging.getLogger(__name__)

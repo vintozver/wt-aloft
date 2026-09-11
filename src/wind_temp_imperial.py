@@ -1,7 +1,4 @@
-try:
-    from .wind_temp_aviation import WindTempAviation
-except ImportError:
-    from wind_temp_aviation import WindTempAviation
+from .wind_temp_aviation import WindTempAviation
 
 
 class WindTempImperial(WindTempAviation):
