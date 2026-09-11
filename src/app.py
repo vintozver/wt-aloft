@@ -66,13 +66,20 @@ class Application(tk.Frame):
         self.bind(self.SUN_UPDATED, self.update_sun)
         if self.aircraft_worker is not None:
             self.bind(self.AIRCRAFT_UPDATED, self.update_aircraft)
-        self.wind_temp_worker.notify = lambda: self.event_generate(self.WIND_TEMP_UPDATED, when='tail')
-        self.sun_worker.notify = lambda: self.event_generate(self.SUN_UPDATED, when='tail')
+        self.wind_temp_worker.notify = lambda: self.notify(self.WIND_TEMP_UPDATED)
+        self.sun_worker.notify = lambda: self.notify(self.SUN_UPDATED)
         if self.aircraft_worker is not None:
-            self.aircraft_worker.notify = lambda: self.event_generate(self.AIRCRAFT_UPDATED, when='tail')
+            self.aircraft_worker.notify = lambda: self.notify(self.AIRCRAFT_UPDATED)
         for worker in self.workers:
             worker.start()
         self.master.after(0, self.invoke_switch_windows)
+
+    def notify(self, event):
+        if not self.shutdown_event:
+            try:
+                self.event_generate(event, when='tail')
+            except tk.TclError:
+                pass
 
     def invoke_switch_windows(self):
         if self.shutdown_event:
