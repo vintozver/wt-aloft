@@ -1,3 +1,4 @@
+import asyncio
 import tkinter as tk
 import requests
 import logging
@@ -5,6 +6,7 @@ import datetime
 import dateutil
 import pytz
 import urllib.parse
+import threading
 from collections import deque
 
 from .aircraft import Aircraft
@@ -13,6 +15,148 @@ from .wind_temp_imperial import WindTempImperial
 
 
 log = logging.getLogger(__name__)
+
+
+class AsyncWorker:
+    def __init__(self, name):
+        self.stop_event = threading.Event()
+        self.loop = None
+        self.tasks = ()
+        self.thread = threading.Thread(target=self._run, name=name, daemon=True)
+
+    def start(self):
+        self.thread.start()
+
+    def stop(self):
+        self.stop_event.set()
+        if self.loop is not None:
+            self.loop.call_soon_threadsafe(self._cancel_tasks)
+
+    def _cancel_tasks(self):
+        for task in self.tasks:
+            task.cancel()
+
+    def _run(self):
+        loop = asyncio.new_event_loop()
+        self.loop = loop
+        asyncio.set_event_loop(loop)
+        self.tasks = (loop.create_task(self.run()),)
+        try:
+            loop.run_until_complete(asyncio.gather(*self.tasks))
+        except asyncio.CancelledError:
+            pass
+        finally:
+            self.tasks = ()
+            loop.close()
+            self.loop = None
+
+    async def request_json(self, uri):
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, lambda: requests.get(uri, timeout=10).json())
+
+class WindTempWorker(AsyncWorker):
+    def __init__(self, screens, uri, interval, tz):
+        super().__init__('wind-temp-worker')
+        self.screens = screens
+        self.uri = uri
+        self.interval = interval
+        self.tz = tz
+        self.data = None
+
+    async def run(self):
+        while not self.stop_event.is_set():
+            try:
+                log.info('update_wt fetching data ...')
+                result = await self.request_json(self.uri)
+                self.data = (
+                    dict(result["direction"]), dict(result["speed"]), dict(result["temp"]),
+                    datetime.datetime.now(self.tz)
+                )
+                log.info('Fetching data success')
+            except (requests.exceptions.RequestException, ValueError, TypeError, KeyError) as err:
+                log.info('Fetching data failure %r', err)
+            await asyncio.sleep(self.interval)
+
+
+class SunWorker(AsyncWorker):
+    def __init__(self, screens, uri, tz):
+        super().__init__('sun-worker')
+        self.screens = screens
+        self.uri = uri
+        self.tz = tz
+        self.data = None
+
+    async def run(self):
+        while not self.stop_event.is_set():
+            try:
+                log.info('Fetching data ...')
+                result = await self.request_json(self.uri)
+                if result.get('status') == 'OK':
+                    self.data = (
+                        datetime.datetime.fromisoformat(result['results']['sunrise']),
+                        datetime.datetime.fromisoformat(result['results']['sunset'])
+                    )
+                    log.info('Fetching data success')
+                    delay = int((datetime.datetime.now(self.tz) +
+                                 dateutil.relativedelta.relativedelta(
+                                     days=1, hour=0, minute=0, second=0
+                                 ) - datetime.datetime.now(self.tz)).total_seconds())
+                else:
+                    delay = 60
+            except (requests.exceptions.RequestException, ValueError, TypeError, KeyError, AttributeError) as err:
+                log.info('Fetching data failure %r', err)
+                delay = 60
+            await asyncio.sleep(delay)
+
+
+class AircraftWorker(AsyncWorker):
+    def __init__(self, screen, interval, tz):
+        super().__init__('aircraft-worker')
+        self.screen = screen
+        self.interval = interval
+        self.tz = tz
+        self.history = {
+            registration: deque([None] * 10, maxlen=10)
+            for registration, _ in screen.aircraft
+        } if screen is not None else {}
+        self.data = {}
+
+    @staticmethod
+    def parse_data(result):
+        records = result.get('ac', result.get('aircraft', [])) if isinstance(result, dict) else []
+        if not records or not isinstance(records[0], dict):
+            return None
+        data = records[0]
+        altitude = data.get('alt_baro', data.get('alt_geom'))
+        speed = data.get('gs')
+        vertical_rate = data.get('baro_rate', data.get('geom_rate', data.get('vert_rate')))
+        if altitude is None or speed is None or isinstance(altitude, str) or isinstance(speed, str):
+            return None
+        status = '—' if vertical_rate is None else '↑' if vertical_rate > 0 else '↓' if vertical_rate < 0 else '—'
+        return '%d ft' % round(altitude), '%d kts' % round(speed), status
+
+    async def run(self):
+        while not self.stop_event.is_set():
+            if self.screen is not None:
+                registrations = ','.join(registration for registration, _ in self.screen.aircraft)
+                uri = 'https://opendata.adsb.fi/api/v2/registration/' + urllib.parse.quote(
+                    registrations, safe=','
+                )
+                try:
+                    response = await asyncio.get_running_loop().run_in_executor(
+                        None, lambda: requests.get(uri, timeout=10)
+                    )
+                    response.raise_for_status()
+                    result = response.json()
+                    records = result.get('ac', result.get('aircraft', []))
+                    self.data = {
+                        record.get('r'): self.parse_data({'ac': [record]})
+                        for record in records
+                        if isinstance(record, dict) and record.get('r') in self.history
+                    }
+                except (requests.exceptions.RequestException, ValueError, TypeError, KeyError, AttributeError) as err:
+                    log.info('Aircraft update failed: %s', err)
+            await asyncio.sleep(self.interval)
 
 
 class Application(tk.Frame):
@@ -35,10 +179,6 @@ class Application(tk.Frame):
         self.wt_update_interval = wt_update_interval * 1000
         self.state_switch_interval = state_switch_interval * 1000
         self.aircraft_update_interval = 10000
-        self.aircraft = aircraft
-        self.aircraft_history = {
-            registration: deque([None] * 10, maxlen=10) for registration, _ in aircraft
-        }
         self.wt_uri = urllib.parse.urlunsplit((
             'https', 'www.markschulze.net', '/winds/winds_openmeteo.php',
             urllib.parse.urlencode((('lat', '%.4f' % latitude), ('lon', '%.4f' % longitude), ('hourOffset', '0'))), ''
@@ -64,6 +204,17 @@ class Application(tk.Frame):
         self._state_delimiter = len(self.screens)
         for screen in self.screens:
             screen.pack_forget()
+        self.wind_temp_worker = WindTempWorker(
+            (self.wind_temp_aviation, self.wind_temp_imperial),
+            self.wt_uri, self.wt_update_interval / 1000, self.tz
+        )
+        self.sun_worker = SunWorker(
+            (self.wind_temp_aviation, self.wind_temp_imperial), self.sun_uri, self.tz
+        )
+        self.aircraft_worker = AircraftWorker(self.aircraft_screen, self.aircraft_update_interval / 1000, self.tz)
+        self.workers = (self.wind_temp_worker, self.sun_worker, self.aircraft_worker)
+        for worker in self.workers:
+            worker.start()
         self.master.after(0, self.check)
         self.master.after(0, self.update_wt)
         self.master.after(0, self.update_sun)
@@ -86,88 +237,40 @@ class Application(tk.Frame):
     def invoke_quit(self):
         log.info("quit enter")
         self.shutdown_event = True
+        for worker in self.workers:
+            worker.stop()
         self.master.destroy()
         log.info("quit exit")
 
     def update_wt(self):
-        result = None
-        try:
-            log.info('update_wt fetching data ...')
-            try:
-                result = requests.get(self.wt_uri, timeout=10).json()
-                log.info('Fetching data success')
-            except (requests.exceptions.RequestException, ValueError) as err:
-                log.info('Fetching data failure %r', err)
-        finally:
-            if result is not None:
-                update_time = datetime.datetime.now(self.tz)
-                for screen in (self.wind_temp_aviation, self.wind_temp_imperial):
-                    screen.update(result["direction"], result["speed"], result["temp"], update_time)
-            self.master.after(self.wt_update_interval, self.update_wt)
+        if self.wind_temp_worker.data is not None:
+            directions, speeds, temps, update_time = self.wind_temp_worker.data
+            for screen in self.wind_temp_worker.screens:
+                screen.update(directions, speeds, temps, update_time)
+        self.master.after(self.wt_update_interval, self.update_wt)
 
     def update_sun(self):
-        result = None
-        try:
-            log.info('Fetching data ...')
-            try:
-                result = requests.get(self.sun_uri, timeout=10).json()
-                log.info('Fetching data success')
-            except (requests.exceptions.RequestException, ValueError) as err:
-                log.info('Fetching data failure %r', err)
-        finally:
-            if result is not None and result.get('status') == 'OK':
-                sunrise = datetime.datetime.fromisoformat(result['results']['sunrise'])
-                sunset = datetime.datetime.fromisoformat(result['results']['sunset'])
-                for screen in (self.wind_temp_aviation, self.wind_temp_imperial):
-                    screen.update_sun(sunrise, sunset)
-                dt = datetime.datetime.now(self.tz)
-                next_upd = int((dt + dateutil.relativedelta.relativedelta(
-                    days=1, hour=0, minute=0, second=0
-                ) - dt).total_seconds())
-                self.master.after(next_upd * 1000, self.update_sun)
-                return
-            self.master.after(60000, self.update_sun)
-
-    @staticmethod
-    def parse_aircraft_data(result):
-        records = result.get('ac', result.get('aircraft', [])) if isinstance(result, dict) else []
-        if not records or not isinstance(records[0], dict):
-            return None
-        data = records[0]
-        altitude = data.get('alt_baro', data.get('alt_geom'))
-        speed = data.get('gs')
-        vertical_rate = data.get('baro_rate', data.get('geom_rate', data.get('vert_rate')))
-        if altitude is None or speed is None or isinstance(altitude, str) or isinstance(speed, str):
-            return None
-        status = '—' if vertical_rate is None else '↑' if vertical_rate > 0 else '↓' if vertical_rate < 0 else '—'
-        return '%d ft' % round(altitude), '%d kts' % round(speed), status
+        if self.sun_worker.data is not None:
+            sunrise, sunset = self.sun_worker.data
+            for screen in self.sun_worker.screens:
+                screen.update_sun(sunrise, sunset)
+        self.master.after(60000, self.update_sun)
 
     def update_aircraft(self):
-        if not self.aircraft:
-            self.master.after(self.aircraft_update_interval, self.update_aircraft)
-            return
-        values_by_registration = {}
-        registrations = ','.join(registration for registration, _ in self.aircraft)
-        uri = 'https://opendata.adsb.fi/api/v2/registration/' + urllib.parse.quote(registrations, safe=',')
-        try:
-            response = requests.get(uri, timeout=10)
-            response.raise_for_status()
-            result = response.json()
-            records = result.get('ac', result.get('aircraft', []))
-            values_by_registration = {
-                record.get('r'): self.parse_aircraft_data({'ac': [record]})
-                for record in records
-                if isinstance(record, dict) and record.get('r') in self.aircraft_history
-            }
-        except (requests.exceptions.RequestException, ValueError, TypeError, KeyError, AttributeError) as err:
-            log.info('Aircraft update failed: %s', err)
-        self.aircraft_screen.update(
-            values_by_registration, self.aircraft_history, datetime.datetime.now(self.tz)
-        )
+        if self.aircraft_screen is not None:
+            self.aircraft_screen.update(
+                self.aircraft_worker.data, self.aircraft_worker.history, datetime.datetime.now(self.tz)
+            )
         self.master.after(self.aircraft_update_interval, self.update_aircraft)
 
     def mainloop(self):
-        super(Application, self).mainloop()
+        try:
+            super(Application, self).mainloop()
+        finally:
+            for worker in self.workers:
+                worker.stop()
+            for worker in self.workers:
+                worker.thread.join()
 
 
 if __name__ == '__main__':
