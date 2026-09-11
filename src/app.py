@@ -55,12 +55,14 @@ class AsyncWorker:
         return await loop.run_in_executor(None, lambda: requests.get(uri, timeout=10).json())
 
 class WindTempWorker(AsyncWorker):
-    def __init__(self, screens, uri, interval, tz):
+    URI = 'https://www.markschulze.net/winds/winds_openmeteo.php'
+
+    def __init__(self, latitude, longitude, interval):
         super().__init__('wind-temp-worker')
-        self.screens = screens
-        self.uri = uri
+        self.uri = self.URI + '?' + urllib.parse.urlencode((
+            ('lat', '%.4f' % latitude), ('lon', '%.4f' % longitude), ('hourOffset', '0')
+        ))
         self.interval = interval
-        self.tz = tz
         self.data = None
 
     async def run(self):
@@ -70,7 +72,7 @@ class WindTempWorker(AsyncWorker):
                 result = await self.request_json(self.uri)
                 self.data = (
                     dict(result["direction"]), dict(result["speed"]), dict(result["temp"]),
-                    datetime.datetime.now(self.tz)
+                    datetime.datetime.now(datetime.timezone.utc)
                 )
                 log.info('Fetching data success')
             except (requests.exceptions.RequestException, ValueError, TypeError, KeyError) as err:
@@ -79,10 +81,14 @@ class WindTempWorker(AsyncWorker):
 
 
 class SunWorker(AsyncWorker):
-    def __init__(self, screens, uri, tz):
+    URI = 'https://api.sunrise-sunset.org/json'
+
+    def __init__(self, latitude, longitude, tz):
         super().__init__('sun-worker')
-        self.screens = screens
-        self.uri = uri
+        self.uri = self.URI + '?' + urllib.parse.urlencode((
+            ('lat', '%.4f' % latitude), ('lng', '%.4f' % longitude),
+            ('formatted', '0'), ('tzid', tz.zone)
+        ))
         self.tz = tz
         self.data = None
 
@@ -110,11 +116,10 @@ class SunWorker(AsyncWorker):
 
 
 class AircraftWorker(AsyncWorker):
-    def __init__(self, screen, interval, tz):
+    def __init__(self, screen, interval):
         super().__init__('aircraft-worker')
         self.screen = screen
         self.interval = interval
-        self.tz = tz
         self.history = {
             registration: deque([None] * 10, maxlen=10)
             for registration, _ in screen.aircraft
@@ -179,17 +184,6 @@ class Application(tk.Frame):
         self.wt_update_interval = wt_update_interval * 1000
         self.state_switch_interval = state_switch_interval * 1000
         self.aircraft_update_interval = 10000
-        self.wt_uri = urllib.parse.urlunsplit((
-            'https', 'www.markschulze.net', '/winds/winds_openmeteo.php',
-            urllib.parse.urlencode((('lat', '%.4f' % latitude), ('lon', '%.4f' % longitude), ('hourOffset', '0'))), ''
-        ))
-        self.sun_uri = urllib.parse.urlunsplit((
-            'https', 'api.sunrise-sunset.org', '/json',
-            urllib.parse.urlencode((('lat', '%.4f' % latitude), ('lng', '%.4f' % longitude),
-                                    ('formatted', '0'), ('tzid', self.tz.zone))), ''
-        ))
-        log.info('WT uri: ' + self.wt_uri)
-        log.info('Sun uri: ' + self.sun_uri)
         self.shutdown_event = False
         self.state = -1
         self.master = master
@@ -204,14 +198,11 @@ class Application(tk.Frame):
         self._state_delimiter = len(self.screens)
         for screen in self.screens:
             screen.pack_forget()
-        self.wind_temp_worker = WindTempWorker(
-            (self.wind_temp_aviation, self.wind_temp_imperial),
-            self.wt_uri, self.wt_update_interval / 1000, self.tz
-        )
-        self.sun_worker = SunWorker(
-            (self.wind_temp_aviation, self.wind_temp_imperial), self.sun_uri, self.tz
-        )
-        self.aircraft_worker = AircraftWorker(self.aircraft_screen, self.aircraft_update_interval / 1000, self.tz)
+        self.wind_temp_worker = WindTempWorker(latitude, longitude, self.wt_update_interval / 1000)
+        self.sun_worker = SunWorker(latitude, longitude, self.tz)
+        self.aircraft_worker = AircraftWorker(self.aircraft_screen, self.aircraft_update_interval / 1000)
+        log.info('WT uri: ' + self.wind_temp_worker.uri)
+        log.info('Sun uri: ' + self.sun_worker.uri)
         self.workers = (self.wind_temp_worker, self.sun_worker, self.aircraft_worker)
         for worker in self.workers:
             worker.start()
@@ -245,14 +236,15 @@ class Application(tk.Frame):
     def update_wt(self):
         if self.wind_temp_worker.data is not None:
             directions, speeds, temps, update_time = self.wind_temp_worker.data
-            for screen in self.wind_temp_worker.screens:
+            update_time = update_time.astimezone(self.tz)
+            for screen in (self.wind_temp_aviation, self.wind_temp_imperial):
                 screen.update(directions, speeds, temps, update_time)
         self.master.after(self.wt_update_interval, self.update_wt)
 
     def update_sun(self):
         if self.sun_worker.data is not None:
             sunrise, sunset = self.sun_worker.data
-            for screen in self.sun_worker.screens:
+            for screen in (self.wind_temp_aviation, self.wind_temp_imperial):
                 screen.update_sun(sunrise, sunset)
         self.master.after(60000, self.update_sun)
 
