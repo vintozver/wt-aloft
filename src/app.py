@@ -21,6 +21,8 @@ class UpdateWorkers:
     def __init__(self, app):
         self.app = app
         self.stop_event = threading.Event()
+        self.loop = None
+        self.tasks = ()
         self.thread = threading.Thread(target=self._run, name='update-workers', daemon=True)
 
     def start(self):
@@ -28,19 +30,30 @@ class UpdateWorkers:
 
     def stop(self):
         self.stop_event.set()
+        if self.loop is not None:
+            self.loop.call_soon_threadsafe(self._cancel_tasks)
+
+    def _cancel_tasks(self):
+        for task in self.tasks:
+            task.cancel()
 
     def _run(self):
         loop = asyncio.new_event_loop()
+        self.loop = loop
         asyncio.set_event_loop(loop)
-        tasks = (
+        self.tasks = (
             loop.create_task(self._update_wt()),
             loop.create_task(self._update_sun()),
             loop.create_task(self._update_aircraft()),
         )
         try:
-            loop.run_until_complete(asyncio.gather(*tasks))
+            loop.run_until_complete(asyncio.gather(*self.tasks))
+        except asyncio.CancelledError:
+            pass
         finally:
+            self.tasks = ()
             loop.close()
+            self.loop = None
 
     async def _request_json(self, uri):
         loop = asyncio.get_running_loop()
@@ -223,7 +236,11 @@ class Application(tk.Frame):
         self.master.after(self.aircraft_update_interval, self.update_aircraft)
 
     def mainloop(self):
-        super(Application, self).mainloop()
+        try:
+            super(Application, self).mainloop()
+        finally:
+            self.update_workers.stop()
+            self.update_workers.thread.join()
 
 
 if __name__ == '__main__':
