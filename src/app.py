@@ -54,12 +54,13 @@ class Application(tk.Frame):
         self.state = -1
         self.master = master
         self.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-        self.screens = [
-            WindTempAviation(font_title, font_stuff, altitudes, self),
-            WindTempImperial(font_title, font_stuff, altitudes, self),
-        ]
+        self.wind_temp_aviation = WindTempAviation(font_title, font_stuff, altitudes, self)
+        self.wind_temp_imperial = WindTempImperial(font_title, font_stuff, altitudes, self)
+        self.screens = [self.wind_temp_aviation, self.wind_temp_imperial]
+        self.aircraft_screen = None
         if aircraft:
-            self.screens.append(Aircraft(font_title, font_stuff, aircraft, self))
+            self.aircraft_screen = Aircraft(font_title, font_stuff, aircraft, self)
+            self.screens.append(self.aircraft_screen)
         self._state_delimiter = len(self.screens)
         for screen in self.screens:
             screen.pack_forget()
@@ -100,7 +101,7 @@ class Application(tk.Frame):
         finally:
             if result is not None:
                 update_time = datetime.datetime.now(self.tz)
-                for screen in self.screens[:2]:
+                for screen in (self.wind_temp_aviation, self.wind_temp_imperial):
                     screen.update(result["direction"], result["speed"], result["temp"], update_time)
             self.master.after(self.wt_update_interval, self.update_wt)
 
@@ -117,7 +118,7 @@ class Application(tk.Frame):
             if result is not None and result.get('status') == 'OK':
                 sunrise = datetime.datetime.fromisoformat(result['results']['sunrise'])
                 sunset = datetime.datetime.fromisoformat(result['results']['sunset'])
-                for screen in self.screens[:2]:
+                for screen in (self.wind_temp_aviation, self.wind_temp_imperial):
                     screen.update_sun(sunrise, sunset)
                 dt = datetime.datetime.now(self.tz)
                 next_upd = int((dt + dateutil.relativedelta.relativedelta(
@@ -160,7 +161,7 @@ class Application(tk.Frame):
             }
         except (requests.exceptions.RequestException, ValueError, TypeError, KeyError, AttributeError) as err:
             log.info('Aircraft update failed: %s', err)
-        self.screens[-1].update(
+        self.aircraft_screen.update(
             values_by_registration, self.aircraft_history, datetime.datetime.now(self.tz)
         )
         self.master.after(self.aircraft_update_interval, self.update_aircraft)
