@@ -59,11 +59,13 @@ class Application(tk.Frame):
         self.state = -1
         self.master = master
         self.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-        self.screens = (
+        self.screens = [
             WindTempAviation(font_title, font_stuff, altitudes, self),
             WindTempImperial(font_title, font_stuff, altitudes, self),
-            Aircraft(font_title, font_stuff, aircraft, self),
-        )
+        ]
+        if aircraft:
+            self.screens.append(Aircraft(font_title, font_stuff, aircraft, self))
+        self._state_delimiter = len(self.screens)
         for screen in self.screens:
             screen.pack_forget()
         self.master.after(0, self.check)
@@ -81,7 +83,7 @@ class Application(tk.Frame):
             return
         for screen in self.screens:
             screen.pack_forget()
-        self.state = (self.state + 1) % self._STATE_DELIMITER
+        self.state = (self.state + 1) % self._state_delimiter
         self.screens[self.state].pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         self.master.after(self.state_switch_interval, self.invoke_switch_windows)
 
@@ -163,7 +165,9 @@ class Application(tk.Frame):
             }
         except (requests.exceptions.RequestException, ValueError, TypeError, KeyError, AttributeError) as err:
             log.info('Aircraft update failed: %s', err)
-        self.screens[2].update(values_by_registration, self.aircraft_history, datetime.datetime.now(self.tz))
+        self.screens[-1].update(
+            values_by_registration, self.aircraft_history, datetime.datetime.now(self.tz)
+        )
         self.master.after(self.aircraft_update_interval, self.update_aircraft)
 
     def mainloop(self):
