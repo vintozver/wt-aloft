@@ -24,9 +24,9 @@ class Application(tk.Frame):
     label_color = 'green'
 
     def __init__(
-        self, latitude, longitude, font_title, font_stuff, altitudes,
-        wt_update_interval, state_switch_interval, aircraft,
-        aircraft_update_interval=10, master=None, screens=None
+        self, screens, latitude, longitude, font_title, font_stuff, altitudes,
+        wt_update_interval, state_switch_interval, aircraft=None,
+        aircraft_update_interval=10, master=None
     ):
         super().__init__(master, background=self.background_color)
         self.tz = pytz.timezone('America/Los_Angeles')
@@ -38,8 +38,6 @@ class Application(tk.Frame):
         self.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         self.wind_temp_aviation = WindTempAviation(font_title, font_stuff, altitudes, self)
         self.wind_temp_imperial = WindTempImperial(font_title, font_stuff, altitudes, self)
-        if screens is None:
-            screens = ['wt_aviation', 'wt_imperial'] + (['aircraft'] if aircraft else [])
         screen_map = {
             'wt_aviation': self.wind_temp_aviation,
             'wt_imperial': self.wind_temp_imperial,
@@ -95,7 +93,7 @@ class Application(tk.Frame):
             return
         for screen in self.screens:
             screen.pack_forget()
-        self.screen_index = (getattr(self, 'screen_index', -1) + 1) % len(self.screens)
+        self.screen_index = (self.screen_index + 1) % len(self.screens)
         self.current_screen = self.screens[self.screen_index]
         self.current_screen.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         if len(self.screens) > 1:
@@ -173,10 +171,9 @@ if __name__ == '__main__':
     if args.geometry is not None:
         root.geometry(args.geometry)
     root.after(0, lambda: root.attributes('-fullscreen', True))
-    app = Application(args.latitude, args.longitude, args.font_title, args.font_stuff, args.altitudes,
+    app = Application(args.screens, args.latitude, args.longitude, args.font_title, args.font_stuff, args.altitudes,
                       args.wt_update_interval, args.state_switch_interval, args.aircraft,
-                      aircraft_update_interval=args.aircraft_update_interval, master=root,
-                      screens=args.screens)
+                      aircraft_update_interval=args.aircraft_update_interval, master=root)
     log.setLevel(logging.DEBUG)
     log.critical("Entering application mainloop")
     app.mainloop()
