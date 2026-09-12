@@ -177,6 +177,12 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(prog='wt_aloft')
     parser.add_argument('--geometry', type=str, help='Geometry to set initially. Fixes the bug with the slow hosts.')
+    parser.add_argument('--screens', action='append',
+                        choices=('wt_aviation', 'wt_imperial', 'aircraft'),
+                        default=None,
+                        help='Screen to display; may be repeated')
+    parser.add_argument('--screen-switch-interval', type=int,
+                        help='Display screen switch interval (seconds)')
     parser.add_argument('--font-title', type=int, required=True, help='Title font size')
     parser.add_argument('--font-stuff', type=int, required=True, help='Stuff font size')
     parser.add_argument('--latitude', type=float, help='GPS latitude in degrees (decimal with dot)')
@@ -185,16 +191,10 @@ if __name__ == '__main__':
                         default=[15, 12, 9, 6, 3, 0],
                         help='Comma separated list of altitudes in thousands of feet each')
     parser.add_argument('--wt-update-interval', type=int, help='WindsTemps update interval (seconds)')
-    parser.add_argument('--screen-switch-interval', type=int,
-                        help='Display screen switch interval (seconds)')
     parser.add_argument('--aircraft-update-interval', type=int,
                         help='Aircraft update interval in seconds')
     parser.add_argument('--aircraft', action='append', type=parse_aircraft, default=[],
                         metavar='REGISTRATION,ALIAS', help='Aircraft registration and display alias; may be repeated')
-    parser.add_argument('--screens', action='append',
-                        choices=('wt_aviation', 'wt_imperial', 'aircraft'),
-                        default=None,
-                        help='Screen to display; may be repeated')
     args = parser.parse_args()
     if args.screens is None:
         args.screens = ['wt_aviation', 'wt_imperial']
