@@ -160,6 +160,22 @@ class WorkerConfigurationTests(unittest.TestCase):
                     screens=['aircraft'], master=mock.Mock()
                 )
 
+    def test_application_does_not_schedule_rotation_for_one_screen(self):
+        screen = mock.Mock()
+        application = mock.Mock(
+            shutdown_event=False,
+            screens=[screen],
+            current_screen=None,
+            screen_index=-1,
+            state_switch_interval=30000,
+            master=mock.Mock(),
+        )
+
+        Application.invoke_switch_windows(application)
+
+        self.assertIs(application.current_screen, screen)
+        application.master.after.assert_not_called()
+
 
 class WindTempTimestampTests(unittest.TestCase):
     def test_worker_stores_update_timestamp_in_utc(self):

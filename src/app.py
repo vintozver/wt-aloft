@@ -98,7 +98,8 @@ class Application(tk.Frame):
         self.screen_index = (getattr(self, 'screen_index', -1) + 1) % len(self.screens)
         self.current_screen = self.screens[self.screen_index]
         self.current_screen.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-        self.master.after(self.state_switch_interval, self.invoke_switch_windows)
+        if len(self.screens) > 1:
+            self.master.after(self.state_switch_interval, self.invoke_switch_windows)
 
     def invoke_quit(self):
         log.info("quit enter")
