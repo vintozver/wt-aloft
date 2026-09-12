@@ -24,23 +24,34 @@ class Application(tk.Frame):
     label_color = 'green'
 
     def __init__(
-        self, screens, latitude, longitude, font_title, font_stuff, altitudes,
-        wt_update_interval, state_switch_interval, aircraft=None,
+        self, screens, font_title, font_stuff, screen_switch_interval=30,
+        wt_altitudes=None, latitude=None, longitude=None, wt_update_interval=60, aircraft=None,
         aircraft_update_interval=10, master=None
     ):
         super().__init__(master, background=self.background_color)
         self.tz = pytz.timezone('America/Los_Angeles')
-        self.state_switch_interval = state_switch_interval * 1000
+        self.screen_switch_interval = screen_switch_interval * 1000
         self.shutdown_event = False
         self.current_screen = None
         self.screen_index = -1
         self.master = master
         self.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-        self.wind_temp_aviation = WindTempAviation(font_title, font_stuff, altitudes, self)
-        self.wind_temp_imperial = WindTempImperial(font_title, font_stuff, altitudes, self)
+        self.wind_temp_aviation = None
+        self.wind_temp_imperial = None
+        if any(name in screens for name in ('wt_aviation', 'wt_imperial')):
+            if latitude is None or longitude is None:
+                raise ValueError('latitude and longitude are required for wind-temperature screens')
+            if wt_altitudes is None:
+                wt_altitudes = [15, 12, 9, 6, 3, 0]
+            if 'wt_aviation' in screens:
+                self.wind_temp_aviation = WindTempAviation(font_title, font_stuff, wt_altitudes, self)
+            if 'wt_imperial' in screens:
+                self.wind_temp_imperial = WindTempImperial(font_title, font_stuff, wt_altitudes, self)
         screen_map = {
-            'wt_aviation': self.wind_temp_aviation,
-            'wt_imperial': self.wind_temp_imperial,
+            name: screen for name, screen in (
+                ('wt_aviation', self.wind_temp_aviation),
+                ('wt_imperial', self.wind_temp_imperial),
+            ) if screen is not None
         }
         self.aircraft_screen = None
         self.aircraft_worker = None
@@ -61,19 +72,25 @@ class Application(tk.Frame):
             raise ValueError('at least one screen is required')
         for screen in self.screens:
             screen.pack_forget()
-        self.wind_temp_worker = WindTempWorker(latitude, longitude, wt_update_interval)
-        self.sun_worker = SunWorker(latitude, longitude, self.tz)
-        log.info('WT uri: ' + self.wind_temp_worker.uri)
-        log.info('Sun uri: ' + self.sun_worker.uri)
-        self.workers = (self.wind_temp_worker, self.sun_worker)
+        self.wind_temp_worker = None
+        self.sun_worker = None
+        self.workers = ()
+        if self.wind_temp_aviation is not None or self.wind_temp_imperial is not None:
+            self.wind_temp_worker = WindTempWorker(latitude, longitude, wt_update_interval)
+            self.sun_worker = SunWorker(latitude, longitude, self.tz)
+            log.info('WT uri: ' + self.wind_temp_worker.uri)
+            log.info('Sun uri: ' + self.sun_worker.uri)
+            self.workers = (self.wind_temp_worker, self.sun_worker)
         if self.aircraft_worker is not None:
             self.workers += (self.aircraft_worker,)
-        self.bind(self.WIND_TEMP_UPDATED, self.update_wt)
-        self.bind(self.SUN_UPDATED, self.update_sun)
+        if self.wind_temp_worker is not None:
+            self.bind(self.WIND_TEMP_UPDATED, self.update_wt)
+            self.bind(self.SUN_UPDATED, self.update_sun)
         if self.aircraft_worker is not None:
             self.bind(self.AIRCRAFT_UPDATED, self.update_aircraft)
-        self.wind_temp_worker.notify = lambda: self.notify(self.WIND_TEMP_UPDATED)
-        self.sun_worker.notify = lambda: self.notify(self.SUN_UPDATED)
+        if self.wind_temp_worker is not None:
+            self.wind_temp_worker.notify = lambda: self.notify(self.WIND_TEMP_UPDATED)
+            self.sun_worker.notify = lambda: self.notify(self.SUN_UPDATED)
         if self.aircraft_worker is not None:
             self.aircraft_worker.notify = lambda: self.notify(self.AIRCRAFT_UPDATED)
         for worker in self.workers:
@@ -97,7 +114,7 @@ class Application(tk.Frame):
         self.current_screen = self.screens[self.screen_index]
         self.current_screen.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         if len(self.screens) > 1:
-            self.master.after(self.state_switch_interval, self.invoke_switch_windows)
+            self.master.after(self.screen_switch_interval, self.invoke_switch_windows)
 
     def invoke_quit(self):
         log.info("quit enter")
@@ -108,17 +125,19 @@ class Application(tk.Frame):
         log.info("quit exit")
 
     def update_wt(self, _event=None):
-        if self.wind_temp_worker.data is not None:
+        if self.wind_temp_worker is not None and self.wind_temp_worker.data is not None:
             directions, speeds, temps, update_time = self.wind_temp_worker.data
             update_time = update_time.astimezone(self.tz)
             for screen in (self.wind_temp_aviation, self.wind_temp_imperial):
-                screen.update(directions, speeds, temps, update_time)
+                if screen is not None:
+                    screen.update(directions, speeds, temps, update_time)
 
     def update_sun(self, _event=None):
-        if self.sun_worker.data is not None:
+        if self.sun_worker is not None and self.sun_worker.data is not None:
             sunrise, sunset = self.sun_worker.data
             for screen in (self.wind_temp_aviation, self.wind_temp_imperial):
-                screen.update_sun(sunrise, sunset)
+                if screen is not None:
+                    screen.update_sun(sunrise, sunset)
 
     def update_aircraft(self, _event=None):
         if self.aircraft_screen is not None:
@@ -148,14 +167,15 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(prog='wt_aloft')
     parser.add_argument('--geometry', type=str, help='Geometry to set initially. Fixes the bug with the slow hosts.')
-    parser.add_argument('--font-title', type=int, default=85, help='Title font size')
-    parser.add_argument('--font-stuff', type=int, default=65, help='Stuff font size')
-    parser.add_argument('--latitude', type=float, required=True, help='GPS latitude in degrees (decimal with dot)')
-    parser.add_argument('--longitude', type=float, required=True, help='GPS longitude in degrees (decimal with dot)')
-    parser.add_argument('--altitudes', type=lambda val: [int(item.strip()) for item in val.split(",")],
-                        default='15,12,9,6,3,0', help='Comma separated list of altitudes in thousands of feet each')
+    parser.add_argument('--font-title', type=int, required=True, help='Title font size')
+    parser.add_argument('--font-stuff', type=int, required=True, help='Stuff font size')
+    parser.add_argument('--latitude', type=float, help='GPS latitude in degrees (decimal with dot)')
+    parser.add_argument('--longitude', type=float, help='GPS longitude in degrees (decimal with dot)')
+    parser.add_argument('--wt-altitudes', type=lambda val: [int(item.strip()) for item in val.split(",")],
+                        help='Comma separated list of altitudes in thousands of feet each')
     parser.add_argument('--wt-update-interval', type=int, default=60, help='WindsTemps update interval (seconds)')
-    parser.add_argument('--state-switch-interval', type=int, default=30, help='Display state switch interval (seconds)')
+    parser.add_argument('--screen-switch-interval', type=int, default=30,
+                        help='Display screen switch interval (seconds)')
     parser.add_argument('--aircraft-update-interval', type=int, default=10,
                         help='Aircraft update interval in seconds')
     parser.add_argument('--aircraft', action='append', type=parse_aircraft, default=[],
@@ -171,9 +191,13 @@ if __name__ == '__main__':
     if args.geometry is not None:
         root.geometry(args.geometry)
     root.after(0, lambda: root.attributes('-fullscreen', True))
-    app = Application(args.screens, args.latitude, args.longitude, args.font_title, args.font_stuff, args.altitudes,
-                      args.wt_update_interval, args.state_switch_interval, args.aircraft,
-                      aircraft_update_interval=args.aircraft_update_interval, master=root)
+    app = Application(
+        args.screens, args.font_title, args.font_stuff,
+        screen_switch_interval=args.screen_switch_interval,
+        wt_altitudes=args.wt_altitudes, latitude=args.latitude, longitude=args.longitude,
+        wt_update_interval=args.wt_update_interval, aircraft=args.aircraft,
+        aircraft_update_interval=args.aircraft_update_interval, master=root
+    )
     log.setLevel(logging.DEBUG)
     log.critical("Entering application mainloop")
     app.mainloop()

@@ -98,7 +98,7 @@ class WorkerConfigurationTests(unittest.TestCase):
             wind_temp_aviation=aviation,
             wind_temp_imperial=imperial,
             aircraft_screen=aircraft,
-            state_switch_interval=30000,
+            screen_switch_interval=30000,
             master=mock.Mock(),
         )
 
@@ -121,7 +121,7 @@ class WorkerConfigurationTests(unittest.TestCase):
             wind_temp_aviation=aviation,
             wind_temp_imperial=imperial,
             aircraft_screen=None,
-            state_switch_interval=30000,
+            screen_switch_interval=30000,
             master=mock.Mock(),
         )
 
@@ -140,7 +140,7 @@ class WorkerConfigurationTests(unittest.TestCase):
             screens=[imperial, aviation, imperial],
             current_screen=None,
             screen_index=-1,
-            state_switch_interval=30000,
+            screen_switch_interval=30000,
             master=mock.Mock(),
         )
 
@@ -168,7 +168,7 @@ class WorkerConfigurationTests(unittest.TestCase):
             screens=[screen],
             current_screen=None,
             screen_index=-1,
-            state_switch_interval=30000,
+            screen_switch_interval=30000,
             master=mock.Mock(),
         )
 
