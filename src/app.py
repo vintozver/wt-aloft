@@ -25,7 +25,7 @@ class Application(tk.Frame):
 
     def __init__(
         self, screens, screen_switch_interval=None, *, font_title, font_stuff,
-        latitude=None, longitude=None, wt_altitudes=(15, 12, 9, 6, 3, 0),
+        latitude=None, longitude=None, wt_altitudes=None,
         wt_update_interval=None, aircraft=None, aircraft_update_interval=None, master=None
     ):
         screens = list(screens)
