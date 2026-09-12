@@ -24,10 +24,13 @@ class Application(tk.Frame):
     label_color = 'green'
 
     def __init__(
-        self, screens, font_title, font_stuff, screen_switch_interval=None,
-        wt_altitudes=(15, 12, 9, 6, 3, 0), latitude=None, longitude=None,
+        self, screens, screen_switch_interval=None, *, font_title, font_stuff,
+        latitude=None, longitude=None, wt_altitudes=(15, 12, 9, 6, 3, 0),
         wt_update_interval=None, aircraft=None, aircraft_update_interval=None, master=None
     ):
+        screens = list(screens)
+        if not screens and aircraft:
+            screens = ['aircraft']
         super().__init__(master, background=self.background_color)
         self.tz = pytz.timezone('America/Los_Angeles')
         self.screen_switch_interval = (
@@ -195,13 +198,15 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if args.screens is None:
         args.screens = ['wt_aviation', 'wt_imperial']
+        if args.aircraft:
+            args.screens.append('aircraft')
     root = tk.Tk()
     if args.geometry is not None:
         root.geometry(args.geometry)
     root.after(0, lambda: root.attributes('-fullscreen', True))
     app = Application(
-        args.screens, args.font_title, args.font_stuff,
-        screen_switch_interval=args.screen_switch_interval,
+        args.screens, args.screen_switch_interval,
+        font_title=args.font_title, font_stuff=args.font_stuff,
         wt_altitudes=args.wt_altitudes, latitude=args.latitude, longitude=args.longitude,
         wt_update_interval=args.wt_update_interval, aircraft=args.aircraft,
         aircraft_update_interval=args.aircraft_update_interval, master=root

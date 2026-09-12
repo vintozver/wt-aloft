@@ -76,7 +76,8 @@ class WorkerConfigurationTests(unittest.TestCase):
         master = mock.Mock()
 
         Application(
-            ['aircraft'], 85, 65, aircraft=[('N123AB', 'Display alias')],
+            ['aircraft'], font_title=85, font_stuff=65,
+            aircraft=[('N123AB', 'Display alias')],
             aircraft_update_interval=25, master=master
         )
 
@@ -157,7 +158,7 @@ class WorkerConfigurationTests(unittest.TestCase):
                     mock.patch.object(Application, 'pack'), \
                     mock.patch.object(Application, 'bind'):
                 Application(
-                    ['aircraft'], 85, 65, master=mock.Mock()
+                    ['aircraft'], font_title=85, font_stuff=65, master=mock.Mock()
                 )
 
     def test_application_does_not_schedule_rotation_for_one_screen(self):
