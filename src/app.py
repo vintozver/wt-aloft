@@ -47,27 +47,26 @@ class Application(tk.Frame):
                 self.wind_temp_aviation = WindTempAviation(font_title, font_stuff, wt_altitudes, self)
             if 'wt_imperial' in screens:
                 self.wind_temp_imperial = WindTempImperial(font_title, font_stuff, wt_altitudes, self)
-        screen_map = {
-            name: screen for name, screen in (
-                ('wt_aviation', self.wind_temp_aviation),
-                ('wt_imperial', self.wind_temp_imperial),
-            ) if screen is not None
-        }
         self.aircraft_screen = None
         self.aircraft_worker = None
         if 'aircraft' in screens:
             if not aircraft:
                 raise ValueError('aircraft screen requires aircraft options')
             self.aircraft_screen = Aircraft(font_title, font_stuff, aircraft, self)
-            screen_map['aircraft'] = self.aircraft_screen
             self.aircraft_worker = AircraftWorker(
                 [registration for registration, _ in aircraft],
                 aircraft_update_interval
             )
-        try:
-            self.screens = [screen_map[name] for name in screens]
-        except KeyError as err:
-            raise ValueError('unknown screen: %s' % err.args[0]) from err
+        self.screens = []
+        for name in screens:
+            if name == 'wt_aviation':
+                self.screens.append(self.wind_temp_aviation)
+            elif name == 'wt_imperial':
+                self.screens.append(self.wind_temp_imperial)
+            elif name == 'aircraft':
+                self.screens.append(self.aircraft_screen)
+            else:
+                raise ValueError('unknown screen: %s' % name)
         if not self.screens:
             raise ValueError('at least one screen is required')
         for screen in self.screens:
