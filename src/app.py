@@ -26,27 +26,41 @@ class Application(tk.Frame):
     def __init__(
         self, latitude, longitude, font_title, font_stuff, altitudes,
         wt_update_interval, state_switch_interval, aircraft,
-        aircraft_update_interval=10, master=None
+        aircraft_update_interval=10, master=None, screens=None
     ):
         super().__init__(master, background=self.background_color)
         self.tz = pytz.timezone('America/Los_Angeles')
         self.state_switch_interval = state_switch_interval * 1000
         self.shutdown_event = False
         self.current_screen = None
+        self.screen_index = -1
         self.master = master
         self.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         self.wind_temp_aviation = WindTempAviation(font_title, font_stuff, altitudes, self)
         self.wind_temp_imperial = WindTempImperial(font_title, font_stuff, altitudes, self)
-        self.screens = [self.wind_temp_aviation, self.wind_temp_imperial]
+        if screens is None:
+            screens = ['wt_aviation', 'wt_imperial'] + (['aircraft'] if aircraft else [])
+        screen_map = {
+            'wt_aviation': self.wind_temp_aviation,
+            'wt_imperial': self.wind_temp_imperial,
+        }
         self.aircraft_screen = None
         self.aircraft_worker = None
-        if aircraft:
+        if 'aircraft' in screens:
+            if not aircraft:
+                raise ValueError('aircraft screen requires aircraft options')
             self.aircraft_screen = Aircraft(font_title, font_stuff, aircraft, self)
-            self.screens.append(self.aircraft_screen)
+            screen_map['aircraft'] = self.aircraft_screen
             self.aircraft_worker = AircraftWorker(
                 [registration for registration, _ in aircraft],
                 aircraft_update_interval
             )
+        try:
+            self.screens = [screen_map[name] for name in screens]
+        except KeyError as err:
+            raise ValueError('unknown screen: %s' % err.args[0]) from err
+        if not self.screens:
+            raise ValueError('at least one screen is required')
         for screen in self.screens:
             screen.pack_forget()
         self.wind_temp_worker = WindTempWorker(latitude, longitude, wt_update_interval)
@@ -81,12 +95,8 @@ class Application(tk.Frame):
             return
         for screen in self.screens:
             screen.pack_forget()
-        if self.current_screen is self.wind_temp_aviation:
-            self.current_screen = self.wind_temp_imperial
-        elif self.current_screen is self.wind_temp_imperial and self.aircraft_screen is not None:
-            self.current_screen = self.aircraft_screen
-        else:
-            self.current_screen = self.wind_temp_aviation
+        self.screen_index = (getattr(self, 'screen_index', -1) + 1) % len(self.screens)
+        self.current_screen = self.screens[self.screen_index]
         self.current_screen.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         self.master.after(self.state_switch_interval, self.invoke_switch_windows)
 
@@ -151,14 +161,21 @@ if __name__ == '__main__':
                         help='Aircraft update interval in seconds')
     parser.add_argument('--aircraft', action='append', type=parse_aircraft, default=[],
                         metavar='REGISTRATION,ALIAS', help='Aircraft registration and display alias; may be repeated')
+    parser.add_argument('--screens', action='append',
+                        choices=('wt_aviation', 'wt_imperial', 'aircraft'),
+                        default=None,
+                        help='Screen to display; may be repeated')
     args = parser.parse_args()
+    if args.screens is None:
+        args.screens = ['wt_aviation', 'wt_imperial']
     root = tk.Tk()
     if args.geometry is not None:
         root.geometry(args.geometry)
     root.after(0, lambda: root.attributes('-fullscreen', True))
     app = Application(args.latitude, args.longitude, args.font_title, args.font_stuff, args.altitudes,
                       args.wt_update_interval, args.state_switch_interval, args.aircraft,
-                      aircraft_update_interval=args.aircraft_update_interval, master=root)
+                      aircraft_update_interval=args.aircraft_update_interval, master=root,
+                      screens=args.screens)
     log.setLevel(logging.DEBUG)
     log.critical("Entering application mainloop")
     app.mainloop()
