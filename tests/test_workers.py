@@ -131,6 +131,35 @@ class WorkerConfigurationTests(unittest.TestCase):
 
         self.assertEqual(displayed_screens, [aviation, imperial, aviation])
 
+    def test_application_cycles_in_configured_order_including_duplicates(self):
+        aviation = mock.Mock()
+        imperial = mock.Mock()
+        application = mock.Mock(
+            shutdown_event=False,
+            screens=[imperial, aviation, imperial],
+            current_screen=None,
+            screen_index=-1,
+            state_switch_interval=30000,
+            master=mock.Mock(),
+        )
+
+        displayed_screens = []
+        for _ in range(4):
+            Application.invoke_switch_windows(application)
+            displayed_screens.append(application.current_screen)
+
+        self.assertEqual(displayed_screens, [imperial, aviation, imperial, imperial])
+
+    def test_application_requires_aircraft_for_aircraft_screen(self):
+        with self.assertRaisesRegex(ValueError, 'requires aircraft options'):
+            with mock.patch('src.app.tk.Frame.__init__', return_value=None), \
+                    mock.patch.object(Application, 'pack'), \
+                    mock.patch.object(Application, 'bind'):
+                Application(
+                    47.0, -122.0, 85, 65, [3, 6], 60, 10, [],
+                    screens=['aircraft'], master=mock.Mock()
+                )
+
 
 class WindTempTimestampTests(unittest.TestCase):
     def test_worker_stores_update_timestamp_in_utc(self):
