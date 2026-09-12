@@ -24,13 +24,15 @@ class Application(tk.Frame):
     label_color = 'green'
 
     def __init__(
-        self, screens, font_title, font_stuff, screen_switch_interval=30,
-        wt_altitudes=None, latitude=None, longitude=None, wt_update_interval=60, aircraft=None,
-        aircraft_update_interval=10, master=None
+        self, screens, font_title, font_stuff, screen_switch_interval=None,
+        wt_altitudes=(15, 12, 9, 6, 3, 0), latitude=None, longitude=None,
+        wt_update_interval=None, aircraft=None, aircraft_update_interval=None, master=None
     ):
         super().__init__(master, background=self.background_color)
         self.tz = pytz.timezone('America/Los_Angeles')
-        self.screen_switch_interval = screen_switch_interval * 1000
+        self.screen_switch_interval = (
+            screen_switch_interval * 1000 if screen_switch_interval is not None else None
+        )
         self.shutdown_event = False
         self.current_screen = None
         self.screen_index = -1
@@ -42,7 +44,9 @@ class Application(tk.Frame):
             if latitude is None or longitude is None:
                 raise ValueError('latitude and longitude are required for wind-temperature screens')
             if wt_altitudes is None:
-                wt_altitudes = [15, 12, 9, 6, 3, 0]
+                raise ValueError('wt_altitudes is required for wind-temperature screens')
+            if wt_update_interval is None:
+                raise ValueError('wt_update_interval is required for wind-temperature screens')
             if 'wt_aviation' in screens:
                 self.wind_temp_aviation = WindTempAviation(font_title, font_stuff, wt_altitudes, self)
             if 'wt_imperial' in screens:
@@ -52,6 +56,8 @@ class Application(tk.Frame):
         if 'aircraft' in screens:
             if not aircraft:
                 raise ValueError('aircraft screen requires aircraft options')
+            if aircraft_update_interval is None:
+                raise ValueError('aircraft_update_interval is required for aircraft screen')
             self.aircraft_screen = Aircraft(font_title, font_stuff, aircraft, self)
             self.aircraft_worker = AircraftWorker(
                 [registration for registration, _ in aircraft],
@@ -69,6 +75,8 @@ class Application(tk.Frame):
                 raise ValueError('unknown screen: %s' % name)
         if not self.screens:
             raise ValueError('at least one screen is required')
+        if len(self.screens) > 1 and screen_switch_interval is None:
+            raise ValueError('screen_switch_interval is required for multiple screens')
         for screen in self.screens:
             screen.pack_forget()
         self.wind_temp_worker = None
@@ -171,11 +179,12 @@ if __name__ == '__main__':
     parser.add_argument('--latitude', type=float, help='GPS latitude in degrees (decimal with dot)')
     parser.add_argument('--longitude', type=float, help='GPS longitude in degrees (decimal with dot)')
     parser.add_argument('--wt-altitudes', type=lambda val: [int(item.strip()) for item in val.split(",")],
+                        default=[15, 12, 9, 6, 3, 0],
                         help='Comma separated list of altitudes in thousands of feet each')
-    parser.add_argument('--wt-update-interval', type=int, default=60, help='WindsTemps update interval (seconds)')
-    parser.add_argument('--screen-switch-interval', type=int, default=30,
+    parser.add_argument('--wt-update-interval', type=int, help='WindsTemps update interval (seconds)')
+    parser.add_argument('--screen-switch-interval', type=int,
                         help='Display screen switch interval (seconds)')
-    parser.add_argument('--aircraft-update-interval', type=int, default=10,
+    parser.add_argument('--aircraft-update-interval', type=int,
                         help='Aircraft update interval in seconds')
     parser.add_argument('--aircraft', action='append', type=parse_aircraft, default=[],
                         metavar='REGISTRATION,ALIAS', help='Aircraft registration and display alias; may be repeated')

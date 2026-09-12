@@ -76,8 +76,8 @@ class WorkerConfigurationTests(unittest.TestCase):
         master = mock.Mock()
 
         Application(
-            ['aircraft'], 47.0, -122.0, 85, 65, [3, 6], 60, 10,
-            [('N123AB', 'Display alias')], aircraft_update_interval=25, master=master
+            ['aircraft'], 85, 65, aircraft=[('N123AB', 'Display alias')],
+            aircraft_update_interval=25, master=master
         )
 
         aircraft_screen.assert_called_once_with(
@@ -157,8 +157,7 @@ class WorkerConfigurationTests(unittest.TestCase):
                     mock.patch.object(Application, 'pack'), \
                     mock.patch.object(Application, 'bind'):
                 Application(
-                    ['aircraft'], 47.0, -122.0, 85, 65, [3, 6], 60, 10,
-                    master=mock.Mock()
+                    ['aircraft'], 85, 65, master=mock.Mock()
                 )
 
     def test_application_does_not_schedule_rotation_for_one_screen(self):
